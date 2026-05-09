@@ -1,0 +1,30 @@
+{
+  "name": "companion-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@types/react-datepicker": "^6.2.0",
+    "axios": "^1.14.0",
+    "next": "^15.3.0",
+    "react": "19.2.4",
+    "react-datepicker": "^9.1.0",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "autoprefixer": "^10.5.0",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.2",
+    "postcss": "^8.5.10",
+    "tailwindcss": "^3.4.19",
+    "typescript": "^5"
+  }
+}
