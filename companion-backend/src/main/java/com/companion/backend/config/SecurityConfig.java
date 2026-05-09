@@ -82,7 +82,14 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of("http://localhost:3000", "http://127.0.0.1:3000"));
+
+        List<String> origins = new java.util.ArrayList<>(List.of("http://localhost:3000", "http://127.0.0.1:3000"));
+        if (allowedOriginsRaw != null && !allowedOriginsRaw.isBlank()) {
+            for (String origin : allowedOriginsRaw.split(",")) {
+                origins.add(origin.trim());
+            }
+        }
+        config.setAllowedOrigins(origins);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
