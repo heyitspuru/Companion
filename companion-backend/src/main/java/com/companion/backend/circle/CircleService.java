@@ -2,8 +2,12 @@ package com.companion.backend.circle;
 
 import com.companion.backend.goal.Goal;
 import com.companion.backend.goal.GoalRepository;
+import com.companion.backend.common.BadRequestException;
+import com.companion.backend.common.ConflictException;
+import com.companion.backend.common.ForbiddenException;
+import com.companion.backend.common.NotFoundException;
+import com.companion.backend.user.CurrentUserProvider;
 import com.companion.backend.user.User;
-import com.companion.backend.user.UserRepository;
 import com.companion.backend.badge.BadgeRepository;
 import com.companion.backend.checkin.StreakRepository;
 import com.companion.backend.checkin.CheckInRepository;
@@ -11,7 +15,6 @@ import com.companion.backend.task.CircleTaskRepository;
 import com.companion.backend.task.TaskCheckinRepository;
 import com.companion.backend.task.CircleTask;
 
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,7 +32,7 @@ public class CircleService {
     private final CircleRepository circleRepository;
     private final CircleMemberRepository circleMemberRepository;
     private final GoalRepository goalRepository;
-    private final UserRepository userRepository;
+    private final CurrentUserProvider currentUserProvider;
     private final StreakRepository streakRepository;
     private final BadgeRepository badgeRepository;
     private final CircleTaskRepository circleTaskRepository;
@@ -39,7 +42,7 @@ public class CircleService {
     public CircleService(CircleRepository circleRepository,
                          CircleMemberRepository circleMemberRepository,
                          GoalRepository goalRepository,
-                         UserRepository userRepository,
+                         CurrentUserProvider currentUserProvider,
                          StreakRepository streakRepository,
                          BadgeRepository badgeRepository,
                          CircleTaskRepository circleTaskRepository,
@@ -48,7 +51,7 @@ public class CircleService {
         this.circleRepository = circleRepository;
         this.circleMemberRepository = circleMemberRepository;
         this.goalRepository = goalRepository;
-        this.userRepository = userRepository;
+        this.currentUserProvider = currentUserProvider;
         this.streakRepository = streakRepository;
         this.badgeRepository = badgeRepository;
         this.circleTaskRepository = circleTaskRepository;
@@ -57,10 +60,7 @@ public class CircleService {
     }
 
     private User getCurrentUser() {
-        String email = SecurityContextHolder.getContext()
-                .getAuthentication().getName();
-        return userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        return currentUserProvider.getCurrentUser();
     }
 
     // ── Create ──
@@ -103,11 +103,15 @@ public class CircleService {
         User currentUser = getCurrentUser();
 
         Circle circle = circleRepository.findByInviteCode(inviteCode)
-                .orElseThrow(() -> new RuntimeException("Invalid invite code"));
+                .orElseThrow(() -> new NotFoundException("Invalid invite code"));
+
+        if (circle.getStatus() != CircleStatus.ACTIVE) {
+            throw new ConflictException("This circle is no longer active");
+        }
 
         if (circleMemberRepository.existsByCircleIdAndUserId(
                 circle.getId(), currentUser.getId())) {
-            throw new RuntimeException("You are already a member of this circle");
+            throw new ConflictException("You are already a member of this circle");
         }
 
         CircleMember member = CircleMember.builder()
@@ -132,8 +136,15 @@ public class CircleService {
     }
 
     public CircleResponse getCircleById(Long circleId) {
+        User currentUser = getCurrentUser();
         Circle circle = circleRepository.findById(circleId)
-                .orElseThrow(() -> new RuntimeException("Circle not found"));
+                .orElseThrow(() -> new NotFoundException("Circle not found"));
+
+        if (!circleMemberRepository.existsByCircleIdAndUserId(
+                circleId, currentUser.getId())) {
+            throw new ForbiddenException("You are not a member of this circle");
+        }
+
         return buildCircleResponse(circle);
     }
 
@@ -142,10 +153,10 @@ public class CircleService {
     public void deleteCircle(Long circleId) {
         User currentUser = getCurrentUser();
         Circle circle = circleRepository.findById(circleId)
-                .orElseThrow(() -> new RuntimeException("Circle not found"));
+                .orElseThrow(() -> new NotFoundException("Circle not found"));
 
         if (!circle.getCreatedBy().getId().equals(currentUser.getId())) {
-            throw new RuntimeException("Only the circle creator can delete it");
+            throw new ForbiddenException("Only the circle creator can delete it");
         }
 
         // Delete in dependency order — children before parents
@@ -180,15 +191,15 @@ public class CircleService {
     public void leaveCircle(Long circleId) {
         User currentUser = getCurrentUser();
         Circle circle = circleRepository.findById(circleId)
-                .orElseThrow(() -> new RuntimeException("Circle not found"));
+                .orElseThrow(() -> new NotFoundException("Circle not found"));
 
         if (circle.getCreatedBy().getId().equals(currentUser.getId())) {
-            throw new RuntimeException("Creator cannot leave — delete the circle instead");
+            throw new BadRequestException("Creator cannot leave — delete the circle instead");
         }
 
         CircleMember membership = circleMemberRepository
                 .findByCircleIdAndUserId(circleId, currentUser.getId())
-                .orElseThrow(() -> new RuntimeException("You are not a member of this circle"));
+                .orElseThrow(() -> new ForbiddenException("You are not a member of this circle"));
 
         circleMemberRepository.delete(membership);
     }
@@ -198,10 +209,10 @@ public class CircleService {
     public CircleResponse concludeCircle(Long circleId, String action, LocalDate newEndDate) {
         User currentUser = getCurrentUser();
         Circle circle = circleRepository.findById(circleId)
-                .orElseThrow(() -> new RuntimeException("Circle not found"));
+                .orElseThrow(() -> new NotFoundException("Circle not found"));
 
         if (!circle.getCreatedBy().getId().equals(currentUser.getId())) {
-            throw new RuntimeException("Only the circle creator can conclude it");
+            throw new ForbiddenException("Only the circle creator can conclude it");
         }
 
         if ("archive".equals(action)) {
@@ -209,7 +220,7 @@ public class CircleService {
             circleRepository.save(circle);
         } else if ("extend".equals(action)) {
             if (newEndDate == null) {
-                throw new RuntimeException("New end date is required for extend");
+                throw new BadRequestException("New end date is required for extend");
             }
             List<Goal> goals = goalRepository.findByCircleId(circleId);
             if (!goals.isEmpty()) {
@@ -220,7 +231,7 @@ public class CircleService {
             circle.setStatus(CircleStatus.ACTIVE);
             circleRepository.save(circle);
         } else {
-            throw new RuntimeException("Invalid action — must be 'archive' or 'extend'");
+            throw new BadRequestException("Invalid action — must be 'archive' or 'extend'");
         }
 
         return buildCircleResponse(circle);
@@ -244,7 +255,7 @@ public class CircleService {
 
     public Map<String, Object> getCircleStats(Long circleId) {
         circleRepository.findById(circleId)
-                .orElseThrow(() -> new RuntimeException("Circle not found"));
+                .orElseThrow(() -> new NotFoundException("Circle not found"));
 
         List<CircleMember> members = circleMemberRepository.findByCircleId(circleId);
 
@@ -281,10 +292,17 @@ public class CircleService {
 
     public List<LeaderboardEntry> getLeaderboard(Long circleId) {
         Circle circle = circleRepository.findById(circleId)
-                .orElseThrow(() -> new RuntimeException("Circle not found"));
+                .orElseThrow(() -> new NotFoundException("Circle not found"));
 
         List<CircleMember> members = circleMemberRepository.findByCircleId(circleId);
         LocalDate today = LocalDate.now();
+
+        // Fetch the circle's badges once, then count per member in memory —
+        // previously this query ran once per member (an N+1 inside the loop).
+        Map<Long, Long> badgeCountByUser = badgeRepository.findByCircleId(circleId)
+                .stream()
+                .collect(Collectors.groupingBy(
+                        b -> b.getUser().getId(), Collectors.counting()));
 
         List<LeaderboardEntry> entries = members.stream().map(member -> {
             var user = member.getUser();
@@ -306,18 +324,10 @@ public class CircleService {
             int completionPct = tasks.isEmpty() ? 0 :
                     (int) ((completedToday * 100) / tasks.size());
 
-            boolean thresholdMet = tasks.isEmpty() ? false : switch (circle.getCompletionThreshold()) {
-                case ANY_TASK -> completedToday > 0;
-                case HALF -> completionPct >= 50;
-                case ALL_TASKS -> completionPct == 100;
-                case CUSTOM -> completionPct >= (circle.getCustomThresholdPercent() != null ?
-                        circle.getCustomThresholdPercent() : 100);
-            };
+            boolean thresholdMet = !tasks.isEmpty()
+                    && circle.isThresholdMet(completedToday, completionPct);
 
-            int badgeCount = (int) badgeRepository.findByCircleId(circleId)
-                    .stream()
-                    .filter(b -> b.getUser().getId().equals(user.getId()))
-                    .count();
+            int badgeCount = badgeCountByUser.getOrDefault(user.getId(), 0L).intValue();
 
             return new LeaderboardEntry(0, user.getUsername(), currentStreak,
                     longestStreak, completionPct, badgeCount, thresholdMet);
@@ -332,15 +342,7 @@ public class CircleService {
         });
 
         for (int i = 0; i < entries.size(); i++) {
-            entries.set(i, new LeaderboardEntry(
-                    i + 1,
-                    entries.get(i).getUsername(),
-                    entries.get(i).getCurrentStreak(),
-                    entries.get(i).getLongestStreak(),
-                    entries.get(i).getTodayCompletionPercent(),
-                    entries.get(i).getTotalBadges(),
-                    entries.get(i).getThresholdMetToday()
-            ));
+            entries.get(i).setRank(i + 1);
         }
 
         return entries;

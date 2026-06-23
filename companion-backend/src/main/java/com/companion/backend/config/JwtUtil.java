@@ -2,6 +2,7 @@ package com.companion.backend.config;
 
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 
@@ -14,8 +15,14 @@ import java.util.function.Function;
 @Component
 public class JwtUtil {
 
-    private final String secret = "companion_super_secret_jwt_key_change_in_production_min_256_bits";
-    private final long expiration = 86400000L;
+    private final String secret;
+    private final long expiration;
+
+    public JwtUtil(@Value("${jwt.secret}") String secret,
+                   @Value("${jwt.expiration:86400000}") long expiration) {
+        this.secret = secret;
+        this.expiration = expiration;
+    }
 
     private Key getSigningKey() {
         byte[] keyBytes = secret.getBytes();

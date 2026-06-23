@@ -5,6 +5,8 @@ import com.companion.backend.circle.Circle;
 import com.companion.backend.circle.CircleMember;
 import com.companion.backend.circle.CircleMemberRepository;
 import com.companion.backend.circle.CircleRepository;
+import com.companion.backend.circle.CircleStatus;
+import com.companion.backend.common.NotFoundException;
 import com.companion.backend.user.User;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -35,16 +37,23 @@ public class BadgeService {
     // Runs every Monday at 9:00 AM
     @Scheduled(cron = "0 0 9 * * MON")
     public void awardWeeklyBadges() {
-        LocalDate today = LocalDate.now();
-        LocalDate weekStart = today.minusDays(7)
-                .with(DayOfWeek.MONDAY);
+        LocalDate weekStart = lastCompletedWeekStart(LocalDate.now());
         LocalDate weekEnd = weekStart.plusDays(6);
 
-        List<Circle> allCircles = circleRepository.findAll();
+        // Only active circles can earn weekly badges — skip archived/concluded
+        // ones instead of running the full award logic against dead circles.
+        List<Circle> activeCircles = circleRepository.findByStatus(CircleStatus.ACTIVE);
 
-        for (Circle circle : allCircles) {
+        for (Circle circle : activeCircles) {
             awardBadgeForCircle(circle, weekStart, weekEnd);
         }
+    }
+
+    // Monday of the most recently completed week, relative to the given day.
+    // Both the scheduled job and the manual trigger use this so they always
+    // evaluate the same date window and dedup against each other correctly.
+    private LocalDate lastCompletedWeekStart(LocalDate reference) {
+        return reference.with(DayOfWeek.MONDAY).minusWeeks(1);
     }
 
     // Can also be triggered manually for a specific circle
@@ -114,10 +123,9 @@ public class BadgeService {
     // Manual trigger for testing
     public BadgeResponse triggerBadgeForCircle(Long circleId) {
         Circle circle = circleRepository.findById(circleId)
-                .orElseThrow(() -> new RuntimeException("Circle not found"));
+                .orElseThrow(() -> new NotFoundException("Circle not found"));
 
-        LocalDate today = LocalDate.now();
-        LocalDate weekStart = today.with(DayOfWeek.MONDAY);
+        LocalDate weekStart = lastCompletedWeekStart(LocalDate.now());
         LocalDate weekEnd = weekStart.plusDays(6);
 
         return awardBadgeForCircle(circle, weekStart, weekEnd);

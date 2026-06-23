@@ -7,7 +7,6 @@ import com.companion.backend.circle.CircleRepository;
 import com.companion.backend.goal.GoalRepository;
 import com.companion.backend.task.TaskCheckinRepository;
 import com.companion.backend.task.CircleTaskRepository;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -18,7 +17,7 @@ import java.util.stream.Collectors;
 @Service
 public class ProfileService {
 
-    private final UserRepository userRepository;
+    private final CurrentUserProvider currentUserProvider;
     private final CircleMemberRepository circleMemberRepository;
     private final BadgeRepository badgeRepository;
     private final StreakRepository streakRepository;
@@ -26,14 +25,14 @@ public class ProfileService {
     private final CircleTaskRepository circleTaskRepository;
     private final TaskCheckinRepository taskCheckinRepository;
 
-    public ProfileService(UserRepository userRepository,
+    public ProfileService(CurrentUserProvider currentUserProvider,
                           CircleMemberRepository circleMemberRepository,
                           BadgeRepository badgeRepository,
                           StreakRepository streakRepository,
                           GoalRepository goalRepository,
                           CircleTaskRepository circleTaskRepository,
                           TaskCheckinRepository taskCheckinRepository) {
-        this.userRepository = userRepository;
+        this.currentUserProvider = currentUserProvider;
         this.circleMemberRepository = circleMemberRepository;
         this.badgeRepository = badgeRepository;
         this.streakRepository = streakRepository;
@@ -43,10 +42,7 @@ public class ProfileService {
     }
 
     private User getCurrentUser() {
-        String email = SecurityContextHolder.getContext()
-                .getAuthentication().getName();
-        return userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        return currentUserProvider.getCurrentUser();
     }
 
     public ProfileResponse getProfile() {
@@ -61,17 +57,13 @@ public class ProfileService {
         int totalBadges = badges.size();
 
         // Longest streak ever across all circles
-        var streaks = streakRepository.findAll().stream()
-                .filter(s -> s.getUser().getId().equals(user.getId()))
-                .collect(Collectors.toList());
+        var streaks = streakRepository.findByUserId(user.getId());
         int longestStreakEver = streaks.stream()
                 .mapToInt(s -> s.getLongestStreak())
                 .max().orElse(0);
 
         // Total tasks completed (all time)
-        var allTasks = circleTaskRepository.findAll().stream()
-                .filter(t -> t.getUser().getId().equals(user.getId()))
-                .collect(Collectors.toList());
+        var allTasks = circleTaskRepository.findByUserId(user.getId());
         List<Long> taskIds = allTasks.stream()
                 .map(t -> t.getId()).collect(Collectors.toList());
         int totalTasksCompleted = taskIds.isEmpty() ? 0 :

@@ -19,6 +19,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.util.Arrays;
 import java.util.List;
 
 @Configuration
@@ -81,15 +82,13 @@ public class SecurityConfig {
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration config = new CorsConfiguration();
+        List<String> allowedOrigins = Arrays.stream(allowedOriginsRaw.split(","))
+                .map(String::trim)
+                .filter(o -> !o.isEmpty())
+                .toList();
 
-        List<String> origins = new java.util.ArrayList<>(List.of("http://localhost:3000", "http://127.0.0.1:3000"));
-        if (allowedOriginsRaw != null && !allowedOriginsRaw.isBlank()) {
-            for (String origin : allowedOriginsRaw.split(",")) {
-                origins.add(origin.trim());
-            }
-        }
-        config.setAllowedOrigins(origins);
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowedOrigins(allowedOrigins);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);

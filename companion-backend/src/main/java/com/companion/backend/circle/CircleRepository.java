@@ -7,4 +7,5 @@ import java.util.Optional;
 public interface CircleRepository extends JpaRepository<Circle, Long> {
     List<Circle> findByCreatedById(Long userId);
     Optional<Circle> findByInviteCode(String inviteCode);
+    List<Circle> findByStatus(CircleStatus status);
 }

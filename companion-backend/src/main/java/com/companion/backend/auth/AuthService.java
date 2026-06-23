@@ -1,5 +1,8 @@
 package com.companion.backend.auth;
 
+import com.companion.backend.common.BadRequestException;
+import com.companion.backend.common.ConflictException;
+import com.companion.backend.common.NotFoundException;
 import com.companion.backend.config.JwtUtil;
 import com.companion.backend.user.User;
 import com.companion.backend.user.UserRepository;
@@ -42,10 +45,10 @@ public class AuthService {
 
     public AuthResponse register(RegisterRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
-            throw new RuntimeException("Email already in use");
+            throw new ConflictException("Email already in use");
         }
         if (userRepository.existsByUsername(request.getUsername())) {
-            throw new RuntimeException("Username already taken");
+            throw new ConflictException("Username already taken");
         }
 
         User user = User.builder()
@@ -82,7 +85,7 @@ public class AuthService {
         );
 
         User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new NotFoundException("User not found"));
 
         var token = jwtUtil.generateToken(
                 new org.springframework.security.core.userdetails.User(
@@ -133,22 +136,22 @@ public class AuthService {
 
     public void resetPassword(String token, String newPassword) {
         PasswordResetToken prt = passwordResetTokenRepository.findByToken(token)
-                .orElseThrow(() -> new RuntimeException("Invalid token"));
+                .orElseThrow(() -> new BadRequestException("Invalid token"));
 
         if (prt.getUsed() || prt.getExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new RuntimeException("Invalid or expired token");
+            throw new BadRequestException("Invalid or expired token");
         }
 
         User user = userRepository.findByEmail(prt.getEmail())
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new NotFoundException("User not found"));
 
         user.setPassword(passwordEncoder.encode(newPassword));
         userRepository.save(user);
 
-        prt.setUsed(true);
-        passwordResetTokenRepository.save(prt);
-
-        // Invalidate all other reset tokens for this email
+        // Invalidate every reset token for this email (including the one just
+        // used). Deleting makes any replay fail at findByToken, so there's no
+        // need to also persist used=true first — that save was immediately
+        // undone by this delete.
         passwordResetTokenRepository.deleteByEmail(user.getEmail());
     }
 }

@@ -3,9 +3,11 @@ package com.companion.backend.checkin;
 import com.companion.backend.circle.Circle;
 import com.companion.backend.circle.CircleMemberRepository;
 import com.companion.backend.circle.CircleRepository;
+import com.companion.backend.common.ConflictException;
+import com.companion.backend.common.ForbiddenException;
+import com.companion.backend.common.NotFoundException;
+import com.companion.backend.user.CurrentUserProvider;
 import com.companion.backend.user.User;
-import com.companion.backend.user.UserRepository;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -19,37 +21,34 @@ public class CheckInService {
     private final StreakRepository streakRepository;
     private final CircleRepository circleRepository;
     private final CircleMemberRepository circleMemberRepository;
-    private final UserRepository userRepository;
+    private final CurrentUserProvider currentUserProvider;
 
     public CheckInService(CheckInRepository checkInRepository,
                           StreakRepository streakRepository,
                           CircleRepository circleRepository,
                           CircleMemberRepository circleMemberRepository,
-                          UserRepository userRepository) {
+                          CurrentUserProvider currentUserProvider) {
         this.checkInRepository = checkInRepository;
         this.streakRepository = streakRepository;
         this.circleRepository = circleRepository;
         this.circleMemberRepository = circleMemberRepository;
-        this.userRepository = userRepository;
+        this.currentUserProvider = currentUserProvider;
     }
 
     private User getCurrentUser() {
-        String email = SecurityContextHolder.getContext()
-                .getAuthentication().getName();
-        return userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        return currentUserProvider.getCurrentUser();
     }
 
     public CheckInResponse doCheckIn(Long circleId) {
         User currentUser = getCurrentUser();
 
         Circle circle = circleRepository.findById(circleId)
-                .orElseThrow(() -> new RuntimeException("Circle not found"));
+                .orElseThrow(() -> new NotFoundException("Circle not found"));
 
         // Verify user is a member
         if (!circleMemberRepository.existsByCircleIdAndUserId(
                 circleId, currentUser.getId())) {
-            throw new RuntimeException("You are not a member of this circle");
+            throw new ForbiddenException("You are not a member of this circle");
         }
 
         LocalDate today = LocalDate.now();
@@ -57,7 +56,7 @@ public class CheckInService {
         // Check if already checked in today
         if (checkInRepository.findByUserIdAndCircleIdAndCheckinDate(
                 currentUser.getId(), circleId, today).isPresent()) {
-            throw new RuntimeException("Already checked in today");
+            throw new ConflictException("Already checked in today");
         }
 
         // Save check-in

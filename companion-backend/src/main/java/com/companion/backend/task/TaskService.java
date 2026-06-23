@@ -3,10 +3,10 @@ package com.companion.backend.task;
 import com.companion.backend.circle.Circle;
 import com.companion.backend.circle.CircleMemberRepository;
 import com.companion.backend.circle.CircleRepository;
-import com.companion.backend.circle.CompletionThreshold;
+import com.companion.backend.common.ForbiddenException;
+import com.companion.backend.common.NotFoundException;
+import com.companion.backend.user.CurrentUserProvider;
 import com.companion.backend.user.User;
-import com.companion.backend.user.UserRepository;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.companion.backend.checkin.Streak;
@@ -21,48 +21,53 @@ public class TaskService {
     private final TaskCheckinRepository taskCheckinRepository;
     private final CircleRepository circleRepository;
     private final CircleMemberRepository circleMemberRepository;
-    private final UserRepository userRepository;
+    private final CurrentUserProvider currentUserProvider;
     private final StreakRepository streakRepository;
 
     public TaskService(CircleTaskRepository circleTaskRepository,
                        TaskCheckinRepository taskCheckinRepository,
                        CircleRepository circleRepository,
                        CircleMemberRepository circleMemberRepository,
-                       UserRepository userRepository,
+                       CurrentUserProvider currentUserProvider,
                        StreakRepository streakRepository) {
         this.circleTaskRepository = circleTaskRepository;
         this.taskCheckinRepository = taskCheckinRepository;
         this.circleRepository = circleRepository;
         this.circleMemberRepository = circleMemberRepository;
-        this.userRepository = userRepository;
+        this.currentUserProvider = currentUserProvider;
         this.streakRepository = streakRepository;
     }
 
     private User getCurrentUser() {
-        String email = SecurityContextHolder.getContext()
-                .getAuthentication().getName();
-        return userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        return currentUserProvider.getCurrentUser();
     }
 
     // Add a task to a circle
     public TaskResponse addTask(Long circleId, String title) {
         User user = getCurrentUser();
         Circle circle = circleRepository.findById(circleId)
-                .orElseThrow(() -> new RuntimeException("Circle not found"));
+                .orElseThrow(() -> new NotFoundException("Circle not found"));
 
         if (!circleMemberRepository.existsByCircleIdAndUserId(circleId, user.getId())) {
-            throw new RuntimeException("Not a member of this circle");
+            throw new ForbiddenException("Not a member of this circle");
         }
 
         List<CircleTask> existing = circleTaskRepository
                 .findByCircleIdAndUserIdOrderByDisplayOrderAsc(circleId, user.getId());
 
+        // Next slot = highest existing order + 1, so deletions (which leave gaps)
+        // never cause a new task to collide with a surviving one.
+        int nextOrder = existing.stream()
+                .map(CircleTask::getDisplayOrder)
+                .filter(java.util.Objects::nonNull)
+                .max(Integer::compareTo)
+                .orElse(0) + 1;
+
         CircleTask task = CircleTask.builder()
                 .circle(circle)
                 .user(user)
                 .title(title)
-                .displayOrder(existing.size() + 1)
+                .displayOrder(nextOrder)
                 .build();
 
         circleTaskRepository.save(task);
@@ -101,10 +106,10 @@ public class TaskService {
     public TaskResponse updateTask(Long taskId, String newTitle) {
         User user = getCurrentUser();
         CircleTask task = circleTaskRepository.findById(taskId)
-                .orElseThrow(() -> new RuntimeException("Task not found"));
+                .orElseThrow(() -> new NotFoundException("Task not found"));
 
         if (!task.getUser().getId().equals(user.getId())) {
-            throw new RuntimeException("Not your task");
+            throw new ForbiddenException("Not your task");
         }
 
         task.setTitle(newTitle.trim());
@@ -117,10 +122,10 @@ public class TaskService {
     public TaskCheckinResponse toggleTask(Long taskId) {
         User user = getCurrentUser();
         CircleTask task = circleTaskRepository.findById(taskId)
-                .orElseThrow(() -> new RuntimeException("Task not found"));
+                .orElseThrow(() -> new NotFoundException("Task not found"));
 
         if (!task.getUser().getId().equals(user.getId())) {
-            throw new RuntimeException("Not your task");
+            throw new ForbiddenException("Not your task");
         }
 
         LocalDate today = LocalDate.now();
@@ -144,7 +149,7 @@ public class TaskService {
 
         Long circleId = task.getCircle().getId();
         Circle circle = circleRepository.findById(circleId)
-                .orElseThrow(() -> new RuntimeException("Circle not found"));
+                .orElseThrow(() -> new NotFoundException("Circle not found"));
 
         List<CircleTask> allTasks = circleTaskRepository
                 .findByCircleIdAndUserIdOrderByDisplayOrderAsc(circleId, user.getId());
@@ -161,13 +166,8 @@ public class TaskService {
                 (int) ((completedCount * 100) / allTasks.size());
 
         // Check threshold and update streak
-        boolean thresholdMet = allTasks.isEmpty() ? false : switch (circle.getCompletionThreshold()) {
-            case ANY_TASK -> completedCount > 0;
-            case HALF -> completionPercent >= 50;
-            case ALL_TASKS -> completionPercent == 100;
-            case CUSTOM -> completionPercent >= (circle.getCustomThresholdPercent() != null ?
-                    circle.getCustomThresholdPercent() : 100);
-        };
+        boolean thresholdMet = !allTasks.isEmpty()
+                && circle.isThresholdMet(completedCount, completionPercent);
 
         updateStreakIfThresholdMet(user, circle, today, thresholdMet);
 
@@ -191,16 +191,15 @@ public class TaskService {
                         .longestStreak(0)
                         .build());
 
-        if (thresholdMet) {
-            // Only increment if not already counted today
-            LocalDate yesterday = today.minusDays(1);
-            boolean alreadyCountedToday = streak.getUpdatedAt() != null &&
-                    streak.getUpdatedAt().toLocalDate().equals(today) &&
-                    streak.getCurrentStreak() > 0;
+        // Track "did the task-threshold mechanism already count today?" via a
+        // dedicated field — NOT updatedAt, which the daily check-in flow also
+        // bumps and would otherwise let this code clobber a check-in streak.
+        boolean countedTodayHere = today.equals(streak.getLastThresholdDate());
 
-            if (!alreadyCountedToday) {
-                boolean hadYesterday = streak.getUpdatedAt() != null &&
-                        streak.getUpdatedAt().toLocalDate().equals(yesterday);
+        if (thresholdMet) {
+            if (!countedTodayHere) {
+                LocalDate yesterday = today.minusDays(1);
+                boolean hadYesterday = yesterday.equals(streak.getLastThresholdDate());
 
                 if (hadYesterday || streak.getCurrentStreak() == 0) {
                     streak.setCurrentStreak(streak.getCurrentStreak() + 1);
@@ -211,14 +210,15 @@ public class TaskService {
                 if (streak.getCurrentStreak() > streak.getLongestStreak()) {
                     streak.setLongestStreak(streak.getCurrentStreak());
                 }
+                streak.setLastThresholdDate(today);
                 streakRepository.save(streak);
             }
         } else {
-            // Threshold not met — if streak was incremented today, roll it back
-            if (streak.getUpdatedAt() != null &&
-                    streak.getUpdatedAt().toLocalDate().equals(today) &&
-                    streak.getCurrentStreak() > 0) {
+            // Threshold no longer met — roll back ONLY the increment this
+            // mechanism itself applied today (guarded by lastThresholdDate).
+            if (countedTodayHere && streak.getCurrentStreak() > 0) {
                 streak.setCurrentStreak(Math.max(0, streak.getCurrentStreak() - 1));
+                streak.setLastThresholdDate(null);
                 streakRepository.save(streak);
             }
         }
@@ -227,7 +227,7 @@ public class TaskService {
     // Get all members' task completion for today in a circle
     public List<MemberTaskSummary> getCircleTaskSummary(Long circleId) {
         Circle circle = circleRepository.findById(circleId)
-                .orElseThrow(() -> new RuntimeException("Circle not found"));
+                .orElseThrow(() -> new NotFoundException("Circle not found"));
 
         return circleMemberRepository.findByCircleId(circleId).stream()
                 .map(member -> {
@@ -245,15 +245,7 @@ public class TaskService {
 
                     int pct = tasks.isEmpty() ? 0 : (int) ((completed * 100) / tasks.size());
 
-                    // Check if threshold met
-                    CompletionThreshold threshold = circle.getCompletionThreshold();
-                    boolean thresholdMet = switch (threshold) {
-                        case ANY_TASK -> completed > 0;
-                        case HALF -> pct >= 50;
-                        case ALL_TASKS -> pct == 100;
-                        case CUSTOM -> pct >= (circle.getCustomThresholdPercent() != null ?
-                                circle.getCustomThresholdPercent() : 100);
-                    };
+                    boolean thresholdMet = circle.isThresholdMet(completed, pct);
 
                     return new MemberTaskSummary(
                             u.getUsername(),

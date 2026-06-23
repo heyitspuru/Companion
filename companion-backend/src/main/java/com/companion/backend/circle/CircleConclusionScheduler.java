@@ -30,9 +30,7 @@ public class CircleConclusionScheduler {
     public void markConcludedCircles() {
         LocalDate today = LocalDate.now();
 
-        List<Circle> activeCircles = circleRepository.findAll().stream()
-                .filter(c -> c.getStatus() == CircleStatus.ACTIVE)
-                .toList();
+        List<Circle> activeCircles = circleRepository.findByStatus(CircleStatus.ACTIVE);
 
         for (Circle circle : activeCircles) {
             List<com.companion.backend.goal.Goal> goals = goalRepository.findByCircleId(circle.getId());

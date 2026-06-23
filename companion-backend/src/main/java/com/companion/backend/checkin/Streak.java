@@ -3,6 +3,7 @@ package com.companion.backend.checkin;
 import com.companion.backend.circle.Circle;
 import com.companion.backend.user.User;
 import jakarta.persistence.*;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
@@ -33,6 +34,12 @@ public class Streak {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    // The day the task-threshold mechanism last counted toward this streak.
+    // Kept separate from updatedAt (which any save bumps) so the task-toggle
+    // rollback never corrupts a streak written by the daily check-in flow.
+    @Column(name = "last_threshold_date")
+    private LocalDate lastThresholdDate;
+
     @PreUpdate
     @PrePersist
     protected void onUpdate() {
@@ -46,6 +53,7 @@ public class Streak {
     public Integer getCurrentStreak() { return currentStreak; }
     public Integer getLongestStreak() { return longestStreak; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
+    public LocalDate getLastThresholdDate() { return lastThresholdDate; }
 
     // Setters
     public void setId(Long id) { this.id = id; }
@@ -54,6 +62,7 @@ public class Streak {
     public void setCurrentStreak(Integer currentStreak) { this.currentStreak = currentStreak; }
     public void setLongestStreak(Integer longestStreak) { this.longestStreak = longestStreak; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+    public void setLastThresholdDate(LocalDate lastThresholdDate) { this.lastThresholdDate = lastThresholdDate; }
 
     // Builder
     public static Builder builder() { return new Builder(); }

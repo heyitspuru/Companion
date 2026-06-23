@@ -21,6 +21,8 @@ public class LeaderboardEntry {
         this.thresholdMetToday = thresholdMetToday;
     }
 
+    public void setRank(Integer rank) { this.rank = rank; }
+
     public Integer getRank() { return rank; }
     public String getUsername() { return username; }
     public Integer getCurrentStreak() { return currentStreak; }

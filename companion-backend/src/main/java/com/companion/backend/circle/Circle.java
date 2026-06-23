@@ -50,6 +50,21 @@ public class Circle {
         createdAt = LocalDateTime.now();
     }
 
+    /**
+     * Whether a member meets this circle's completion threshold for the day.
+     * Single source of truth for the rule — previously copy-pasted as a switch
+     * in TaskService (toggle + summary) and CircleService (leaderboard).
+     */
+    public boolean isThresholdMet(long completedCount, int completionPercent) {
+        return switch (completionThreshold) {
+            case ANY_TASK -> completedCount > 0;
+            case HALF -> completionPercent >= 50;
+            case ALL_TASKS -> completionPercent == 100;
+            case CUSTOM -> completionPercent >=
+                    (customThresholdPercent != null ? customThresholdPercent : 100);
+        };
+    }
+
     // Getters
     public Long getId() { return id; }
     public String getName() { return name; }

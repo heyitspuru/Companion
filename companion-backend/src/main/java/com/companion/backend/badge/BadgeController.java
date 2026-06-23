@@ -1,9 +1,8 @@
 package com.companion.backend.badge;
 
+import com.companion.backend.user.CurrentUserProvider;
 import com.companion.backend.user.User;
-import com.companion.backend.user.UserRepository;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -14,12 +13,12 @@ import java.util.List;
 public class BadgeController {
 
     private final BadgeService badgeService;
-    private final UserRepository userRepository;
+    private final CurrentUserProvider currentUserProvider;
 
     public BadgeController(BadgeService badgeService,
-                           UserRepository userRepository) {
+                           CurrentUserProvider currentUserProvider) {
         this.badgeService = badgeService;
-        this.userRepository = userRepository;
+        this.currentUserProvider = currentUserProvider;
     }
 
     // Get all badges for a circle
@@ -32,10 +31,7 @@ public class BadgeController {
     // Get my badges across all circles
     @GetMapping("/my")
     public ResponseEntity<List<BadgeResponse>> getMyBadges() {
-        String email = SecurityContextHolder.getContext()
-                .getAuthentication().getName();
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        User user = currentUserProvider.getCurrentUser();
         return ResponseEntity.ok(badgeService.getMyBadges(user.getId()));
     }
 

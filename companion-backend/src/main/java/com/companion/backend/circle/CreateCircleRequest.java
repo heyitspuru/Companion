@@ -1,6 +1,7 @@
 package com.companion.backend.circle;
 
 import com.companion.backend.goal.GoalCategory;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.time.LocalDate;
@@ -28,6 +29,18 @@ public class CreateCircleRequest {
     private CompletionThreshold completionThreshold;
 
     private Integer customThresholdPercent;
+
+    // A CUSTOM threshold is meaningless without a percent; reject it at the edge
+    // instead of silently defaulting to 100 (which makes CUSTOM == ALL_TASKS).
+    @AssertTrue(message = "customThresholdPercent (1-100) is required when completionThreshold is CUSTOM")
+    public boolean isCustomThresholdValid() {
+        if (completionThreshold != CompletionThreshold.CUSTOM) {
+            return true;
+        }
+        return customThresholdPercent != null
+                && customThresholdPercent >= 1
+                && customThresholdPercent <= 100;
+    }
 
     // Getters
     public String getName() { return name; }
