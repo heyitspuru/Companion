@@ -1,0 +1,25 @@
+# Test-only config. Uses an in-memory H2 database so the context-load smoke
+# test runs without a live Postgres, and supplies a dummy JWT secret.
+# Production still requires JWT_SECRET from the environment — application.yml
+# in src/main has no default on purpose.
+spring:
+  datasource:
+    url: jdbc:h2:mem:companion_test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+  # Host is only needed so JavaMailSender autoconfigures; nothing connects
+  # during the context-load test.
+  mail:
+    host: localhost
+    port: 587
+
+jwt:
+  secret: test_secret_companion_min_256_bits_0123456789_0123456789_abcdef
+  expiration: 86400000
