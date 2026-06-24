@@ -2,8 +2,12 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { getCircleBadges, getMyCheckIns, getCircleById, leaveCircle } from '../../../../lib/api';
-import { Badge, CheckIn, Circle } from '../../../../types/index';
+import { Flame, Medal, CheckCircle2, Frown, HeartHandshake } from 'lucide-react';
+import { getCircleBadges, getMyCheckIns, getCircleById, leaveCircle } from '@/lib/api';
+import { Badge, CheckIn, Circle } from '@/types/index';
+import { Button } from '@/components/ui/Button';
+import { ErrorBanner } from '@/components/ui/ErrorBanner';
+import { PageLoader } from '@/components/ui/Skeleton';
 
 const ROASTS = [
   'Wow. Day 1 and you are already done? Impressive.',
@@ -12,7 +16,7 @@ const ROASTS = [
   'Quitting is a skill too, I guess.',
   'Plot twist: nobody noticed you were here.',
   'Even your streak did not see this coming.',
-  'Bold strategy. The coward\'s way out usually is.'
+  "Bold strategy. The coward's way out usually is.",
 ];
 
 export default function LeaveCirclePage() {
@@ -36,7 +40,6 @@ export default function LeaveCirclePage() {
       router.push('/login');
       return;
     }
-
     const load = async () => {
       try {
         const [circleRes, checkinRes, badgeRes] = await Promise.all([
@@ -53,13 +56,12 @@ export default function LeaveCirclePage() {
         setLoading(false);
       }
     };
-
     void load();
   }, [circleId, router]);
 
-  const username = typeof window !== 'undefined' ? localStorage.getItem('username') || '' : '';
-  const badgeCount = badges.filter(b => b.username === username).length;
-  const daysCompleted = checkins.filter(c => c.completed).length;
+  const usernameNow = typeof window !== 'undefined' ? localStorage.getItem('username') || '' : '';
+  const badgeCount = badges.filter((b) => b.username === usernameNow).length;
+  const daysCompleted = checkins.filter((c) => c.completed).length;
   const streak = checkins.length > 0 ? checkins[0].currentStreak || 0 : 0;
 
   const handleLeave = async () => {
@@ -68,125 +70,93 @@ export default function LeaveCirclePage() {
     try {
       await leaveCircle(circleId);
       router.push('/dashboard');
-    } catch (err: any) {
-      const message = err?.response?.data?.message || 'Unable to leave circle right now';
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        'Unable to leave circle right now';
       setError(message);
       setActionLoading(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div style={{
-        minHeight: '100vh', backgroundColor: '#0a0a0f',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: 'white', fontFamily: 'system-ui'
-      }}>
-        Loading...
-      </div>
-    );
-  }
-
+  if (loading) return <PageLoader />;
   if (!circle) return null;
 
+  const stats = [
+    { label: 'Streak', value: streak, icon: Flame, color: '#2cb67d' },
+    { label: 'Badges', value: badgeCount, icon: Medal, color: '#e53170' },
+    { label: 'Days done', value: daysCompleted, icon: CheckCircle2, color: '#ff8906' },
+  ];
+
   return (
-    <main style={{
-      minHeight: '100vh', backgroundColor: '#0a0a0f',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: '2rem', fontFamily: 'system-ui, sans-serif', color: 'white'
-    }}>
-      <div style={{
-        background: '#12121a', border: '1px solid #1e1e2e',
-        borderRadius: '28px', padding: '40px', width: '100%', maxWidth: '560px'
-      }}>
+    <main className="flex min-h-screen items-center justify-center p-6 text-paragraph">
+      <div className="w-full max-w-xl animate-fade-up rounded-xl3 border border-border bg-surface/80 p-8 shadow-glow backdrop-blur-xl sm:p-10">
         {stage === 1 ? (
           <>
-            <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-              <div style={{ fontSize: '44px', marginBottom: '12px' }}>🤝</div>
-              <h1 style={{ fontSize: '28px', fontWeight: '800', marginBottom: '8px' }}>
-                You have shown up {streak} days in a row.
+            <div className="mb-6 text-center">
+              <HeartHandshake className="mx-auto mb-3 h-11 w-11 text-primary-bright" aria-hidden />
+              <h1 className="font-display text-3xl text-headline">
+                You&apos;ve shown up {streak} days in a row.
               </h1>
-              <p style={{ color: '#9ca3af', fontSize: '14px' }}>
+              <p className="mt-2 text-sm text-paragraph">
                 Your circle is counting on you in {circle.name}.
               </p>
             </div>
 
-            <div style={{
-              display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px',
-              marginBottom: '24px'
-            }}>
-              {[
-                { label: 'Streak', value: `${streak}🔥`, color: '#10b981' },
-                { label: 'Badges', value: `${badgeCount}🏅`, color: '#f59e0b' },
-                { label: 'Days done', value: `${daysCompleted}`, color: '#6366f1' },
-              ].map(stat => (
-                <div key={stat.label} style={{
-                  background: '#0a0a0f', border: '1px solid #1e1e2e',
-                  borderRadius: '14px', padding: '14px', textAlign: 'center'
-                }}>
-                  <div style={{ fontSize: '18px', fontWeight: '800', color: stat.color }}>
-                    {stat.value}
+            <div className="mb-6 grid grid-cols-3 gap-3">
+              {stats.map((s) => {
+                const Icon = s.icon;
+                return (
+                  <div
+                    key={s.label}
+                    className="rounded-xl border border-border bg-surface-2 p-4 text-center"
+                  >
+                    <Icon className="mx-auto mb-1.5 h-5 w-5" style={{ color: s.color }} aria-hidden />
+                    <div className="font-heading text-xl" style={{ color: s.color }}>
+                      {s.value}
+                    </div>
+                    <div className="mt-1 text-xs text-muted">{s.label}</div>
                   </div>
-                  <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '6px' }}>
-                    {stat.label}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <button onClick={() => router.push(`/circle/${circleId}`)} style={{
-                background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                color: 'white', fontWeight: '700', padding: '14px',
-                borderRadius: '12px', border: 'none', fontSize: '15px',
-                cursor: 'pointer'
-              }}>
+            <div className="flex flex-col gap-3">
+              <Button fullWidth onClick={() => router.push(`/circle/${circleId}`)}>
                 Stay and keep going
-              </button>
-              <button onClick={() => setStage(2)} style={{
-                background: 'transparent', color: '#6b7280',
-                border: '1px solid #1e1e2e', padding: '12px',
-                borderRadius: '12px', fontSize: '13px', cursor: 'pointer'
-              }}>
+              </Button>
+              <Button variant="ghost" fullWidth onClick={() => setStage(2)}>
                 I still want to leave
-              </button>
+              </Button>
             </div>
           </>
         ) : (
           <>
-            <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-              <div style={{ fontSize: '44px', marginBottom: '12px' }}>😬</div>
-              <h1 style={{ fontSize: '28px', fontWeight: '800', marginBottom: '8px' }}>
-                Giving up already?
-              </h1>
-              <p style={{ color: '#9ca3af', fontSize: '14px' }}>{roast}</p>
+            <div className="mb-6 text-center">
+              <Frown className="mx-auto mb-3 h-11 w-11 text-gold" aria-hidden />
+              <h1 className="font-display text-3xl text-headline">Giving up already?</h1>
+              <p className="mt-2 text-sm text-paragraph">{roast}</p>
             </div>
 
             {error && (
-              <div style={{
-                background: 'rgba(244,63,94,0.1)', border: '1px solid rgba(244,63,94,0.3)',
-                color: '#fb7185', padding: '12px 16px', borderRadius: '12px',
-                marginBottom: '20px', fontSize: '14px', textAlign: 'center'
-              }}>{error}</div>
+              <div className="mb-5">
+                <ErrorBanner message={error} />
+              </div>
             )}
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <button onClick={() => router.push(`/circle/${circleId}`)} style={{
-                background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                color: 'white', fontWeight: '700', padding: '14px',
-                borderRadius: '12px', border: 'none', fontSize: '15px',
-                cursor: 'pointer'
-              }}>
-                Fine, I will stay
-              </button>
-              <button onClick={handleLeave} disabled={actionLoading} style={{
-                background: actionLoading ? '#3f3f46' : 'rgba(244,63,94,0.12)',
-                color: '#fb7185', border: '1px solid rgba(244,63,94,0.35)',
-                padding: '12px', borderRadius: '12px', fontSize: '13px',
-                cursor: actionLoading ? 'not-allowed' : 'pointer', fontWeight: '600'
-              }}>
-                {actionLoading ? 'Leaving...' : 'Yes, I am done'}
-              </button>
+            <div className="flex flex-col gap-3">
+              <Button fullWidth onClick={() => router.push(`/circle/${circleId}`)}>
+                Fine, I&apos;ll stay
+              </Button>
+              <Button
+                variant="danger"
+                fullWidth
+                onClick={handleLeave}
+                loading={actionLoading}
+                loadingText="Leaving…"
+              >
+                Yes, I am done
+              </Button>
             </div>
           </>
         )}

@@ -36,7 +36,7 @@ export const resetPassword = (token: string, newPassword: string) =>
 export const createCircle = (data: {
   name: string;
   goalTitle: string;
-  goalDescription: string;
+  goalDescription?: string;
   goalCategory: string;
   startDate: string;
   endDate: string;

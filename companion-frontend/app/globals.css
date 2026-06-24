@@ -1,3 +1,192 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ── Palette as CSS variables (happyhues #14: light page, dark cards, warm
+      orange→coral→pink accents). RGB triplets so Tailwind /opacity works. ── */
+:root {
+  --bg: 255 255 254; /* #fffffe — light page background */
+  --ink: 15 14 23; /* #0f0e17 — primary text on light bg */
+  --ink-soft: 46 47 62; /* #2e2f3e — sub-headline on light bg */
+  --surface: 15 14 23; /* #0f0e17 — DARK cards */
+  --surface-2: 27 26 38; /* #1b1a26 — raised insets / inputs on cards */
+  --border: 42 41 53; /* #2a2935 — borders on dark cards */
+  --headline: 255 255 254; /* #fffffe — heading text on cards */
+  --paragraph: 167 169 190; /* #a7a9be — paragraph text on cards */
+  --muted: 110 112 128; /* #6e7080 — dim text on cards */
+  --primary: 255 137 6; /* #ff8906 — highlight (CTAs, links, fire) */
+  --primary-bright: 255 160 51; /* #ffa033 */
+  --primary-deep: 194 65 12; /* #c2410c */
+  --success: 44 182 125; /* #2cb67d — done / verified (the one green) */
+  --danger: 242 95 76; /* #f25f4c — secondary / errors / missed */
+  --fire: 255 137 6; /* #ff8906 — streaks */
+  --gold: 229 49 112; /* #e53170 — tertiary, badges / winners */
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    color: rgb(var(--ink));
+    background-color: rgb(var(--bg));
+    min-height: 100vh;
+    position: relative;
+  }
+
+  /* Atmospheric backdrop: warm orange + pink washes over off-white, fixed so
+     it never scroll-jumps and sits behind all content. */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(55% 50% at 6% 0%, rgba(255, 137, 6, 0.12) 0%, transparent 60%),
+      radial-gradient(55% 45% at 100% 100%, rgba(229, 49, 112, 0.1) 0%, transparent 60%),
+      radial-gradient(45% 40% at 100% 0%, rgba(242, 95, 76, 0.08) 0%, transparent 60%),
+      linear-gradient(180deg, #fffffe 0%, #fdf8f4 100%);
+  }
+
+  /* Subtle dark grid texture over the light bg */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    opacity: 0.6;
+    background-image:
+      linear-gradient(rgba(15, 14, 23, 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(15, 14, 23, 0.035) 1px, transparent 1px);
+    background-size: 56px 56px;
+    -webkit-mask-image: radial-gradient(circle at 50% 30%, black, transparent 80%);
+    mask-image: radial-gradient(circle at 50% 30%, black, transparent 80%);
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    color: rgb(var(--ink));
+  }
+
+  input:-webkit-autofill,
+  input:-webkit-autofill:focus {
+    -webkit-text-fill-color: rgb(var(--headline));
+    -webkit-box-shadow: 0 0 0px 1000px rgb(var(--surface-2)) inset;
+    caret-color: rgb(var(--headline));
+  }
+
+  * {
+    scrollbar-color: rgb(var(--muted)) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: rgb(var(--muted) / 0.5);
+    border-radius: 999px;
+  }
+}
+
+@layer components {
+  .focus-ring {
+    @apply outline-none focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-offset-2 focus-visible:ring-offset-bg;
+  }
+
+  /* Staggered page-load reveal */
+  .reveal-item {
+    opacity: 0;
+    animation: reveal-up 600ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+  .reveal-item:nth-child(1) { animation-delay: 60ms; }
+  .reveal-item:nth-child(2) { animation-delay: 140ms; }
+  .reveal-item:nth-child(3) { animation-delay: 220ms; }
+  .reveal-item:nth-child(4) { animation-delay: 300ms; }
+  .reveal-item:nth-child(5) { animation-delay: 380ms; }
+  .reveal-item:nth-child(6) { animation-delay: 460ms; }
+}
+
+@keyframes reveal-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* react-datepicker — lives inside dark cards, so it stays dark */
+.react-datepicker {
+  background: rgb(var(--surface)) !important;
+  border: 1px solid rgb(var(--border)) !important;
+  color: rgb(var(--headline)) !important;
+  font-family: var(--font-chakra), system-ui, sans-serif !important;
+}
+.react-datepicker__header {
+  background: rgb(var(--surface-2)) !important;
+  border-bottom: 1px solid rgb(var(--border)) !important;
+}
+.react-datepicker__current-month,
+.react-datepicker__day-name,
+.react-datepicker__day {
+  color: rgb(var(--headline)) !important;
+}
+.react-datepicker__day:hover {
+  background: rgb(var(--primary)) !important;
+  color: #0f0e17 !important;
+  border-radius: 8px !important;
+}
+.react-datepicker__day--selected {
+  background: rgb(var(--primary)) !important;
+  color: #0f0e17 !important;
+  border-radius: 8px !important;
+}
+.react-datepicker__day--disabled {
+  color: #4b4b57 !important;
+}
+.react-datepicker__navigation-icon::before {
+  border-color: rgb(var(--headline)) !important;
+}
+.react-datepicker-wrapper {
+  width: 100% !important;
+}
+.react-datepicker__input-container input {
+  width: 100%;
+  background: rgb(var(--surface-2));
+  border: 1px solid rgb(var(--border));
+  border-radius: 12px;
+  padding: 12px 16px;
+  color: rgb(var(--headline));
+  font-size: 14px;
+  font-family: var(--font-chakra), system-ui, sans-serif;
+  outline: none;
+  box-sizing: border-box;
+  cursor: pointer;
+}
+.react-datepicker__input-container input::placeholder {
+  color: rgb(var(--muted));
+}
+.react-datepicker__input-container input:focus {
+  border-color: rgb(var(--primary));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .reveal-item {
+    opacity: 1;
+  }
+}

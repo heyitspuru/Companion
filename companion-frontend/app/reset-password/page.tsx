@@ -2,8 +2,13 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
-import { resetPassword } from '../../lib/api';
+import { ArrowRight, CheckCircle2 } from 'lucide-react';
+import { resetPassword } from '@/lib/api';
+import { AuthShell } from '@/components/layout/AuthShell';
+import { Field } from '@/components/ui/Field';
+import { Button } from '@/components/ui/Button';
+import { ErrorBanner } from '@/components/ui/ErrorBanner';
+import { PageLoader } from '@/components/ui/Skeleton';
 
 function ResetPasswordForm() {
   const router = useRouter();
@@ -19,6 +24,8 @@ function ResetPasswordForm() {
   useEffect(() => {
     if (!token) setError('Invalid or missing reset token. Please request a new link.');
   }, [token]);
+
+  const mismatch = confirmPassword.length > 0 && confirmPassword !== newPassword;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,8 +43,10 @@ function ResetPasswordForm() {
       await resetPassword(token, newPassword);
       setDone(true);
       setTimeout(() => router.push('/login'), 3000);
-    } catch (err: any) {
-      const message = err?.response?.data?.message || 'Reset failed — the link may have expired';
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        'Reset failed — the link may have expired';
       setError(message);
     } finally {
       setLoading(false);
@@ -45,117 +54,65 @@ function ResetPasswordForm() {
   };
 
   return (
-    <main style={{
-      minHeight: '100vh', backgroundColor: '#0a0a0f',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: '2rem', fontFamily: 'system-ui, sans-serif',
-    }}>
-      <div style={{
-        background: '#12121a', border: '1px solid #1e1e2e',
-        borderRadius: '24px', padding: '40px', width: '100%', maxWidth: '440px',
-      }}>
-        <div style={{ marginBottom: '32px' }}>
-          <Link href="/login" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '14px' }}>
-            ← Back to login
-          </Link>
-          <h1 style={{ fontSize: '30px', fontWeight: '800', color: 'white', marginTop: '16px', marginBottom: '8px' }}>
-            Set new password 🔐
-          </h1>
-          <p style={{ color: '#6b7280', fontSize: '15px' }}>Choose something strong</p>
-        </div>
-
-        {done ? (
-          <div style={{
-            background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)',
-            borderRadius: '16px', padding: '24px', textAlign: 'center'
-          }}>
-            <div style={{ fontSize: '40px', marginBottom: '12px' }}>✅</div>
-            <p style={{ color: '#10b981', fontWeight: '700', fontSize: '16px', marginBottom: '8px' }}>
-              Password updated!
-            </p>
-            <p style={{ color: '#6b7280', fontSize: '14px' }}>
-              Redirecting you to login...
-            </p>
+    <AuthShell
+      title="Set new password"
+      subtitle="Choose something strong."
+      back={{ href: '/login', label: 'Back to login' }}
+    >
+      {done ? (
+        <div className="flex flex-col items-center gap-4 text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-success/15 shadow-glow-success">
+            <CheckCircle2 className="h-8 w-8 text-success" aria-hidden />
           </div>
-        ) : (
-          <>
-            {error && (
-              <div style={{
-                background: 'rgba(244,63,94,0.1)', border: '1px solid rgba(244,63,94,0.3)',
-                color: '#fb7185', padding: '12px 16px', borderRadius: '12px',
-                marginBottom: '24px', fontSize: '14px',
-              }}>{error}</div>
-            )}
-
-            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <label style={{ color: '#9ca3af', fontSize: '12px' }}>New password</label>
-                <input
-                  type="password"
-                  suppressHydrationWarning
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Min. 8 characters"
-                  required
-                  disabled={!token}
-                  style={{
-                    background: '#0a0a0f', border: '1px solid #1e1e2e',
-                    borderRadius: '12px', padding: '12px 14px', color: 'white',
-                    fontSize: '14px', outline: 'none',
-                    opacity: !token ? 0.5 : 1
-                  }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <label style={{ color: '#9ca3af', fontSize: '12px' }}>Confirm password</label>
-                <input
-                  type="password"
-                  suppressHydrationWarning
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="••••••••"
-                  required
-                  disabled={!token}
-                  style={{
-                    background: '#0a0a0f',
-                    border: `1px solid ${confirmPassword && confirmPassword !== newPassword ? 'rgba(244,63,94,0.4)' : '#1e1e2e'}`,
-                    borderRadius: '12px', padding: '12px 14px', color: 'white',
-                    fontSize: '14px', outline: 'none',
-                    opacity: !token ? 0.5 : 1
-                  }}
-                />
-                {confirmPassword && confirmPassword !== newPassword && (
-                  <span style={{ color: '#fb7185', fontSize: '12px' }}>Passwords don't match</span>
-                )}
-              </div>
-
-              <button type="submit" disabled={loading || !token} style={{
-                background: loading || !token ? '#374151' : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                color: 'white', fontWeight: '700', padding: '14px',
-                borderRadius: '12px', border: 'none', fontSize: '15px',
-                cursor: loading || !token ? 'not-allowed' : 'pointer',
-                boxShadow: loading || !token ? 'none' : '0 0 20px rgba(99,102,241,0.3)',
-              }}>
-                {loading ? 'Updating...' : 'Update password →'}
-              </button>
-            </form>
-          </>
-        )}
-      </div>
-    </main>
+          <p className="font-heading text-base text-success">Password updated!</p>
+          <p className="text-sm text-paragraph">Redirecting you to login…</p>
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {error && <ErrorBanner message={error} />}
+          <Field
+            label="New password"
+            name="newPassword"
+            type="password"
+            suppressHydrationWarning
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            placeholder="Min. 8 characters"
+            required
+            disabled={!token}
+          />
+          <Field
+            label="Confirm password"
+            name="confirmPassword"
+            type="password"
+            suppressHydrationWarning
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="••••••••"
+            required
+            disabled={!token}
+            error={mismatch}
+            hint={mismatch ? "Passwords don't match" : undefined}
+          />
+          <Button
+            type="submit"
+            fullWidth
+            loading={loading}
+            loadingText="Updating…"
+            disabled={!token}
+            className="mt-1"
+          >
+            Update password <ArrowRight className="h-4 w-4" aria-hidden />
+          </Button>
+        </form>
+      )}
+    </AuthShell>
   );
 }
 
 export default function ResetPasswordPage() {
   return (
-    <Suspense fallback={
-      <div style={{
-        minHeight: '100vh', backgroundColor: '#0a0a0f',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: 'white', fontFamily: 'system-ui'
-      }}>Loading...</div>
-    }>
+    <Suspense fallback={<PageLoader />}>
       <ResetPasswordForm />
     </Suspense>
   );

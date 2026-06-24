@@ -2,7 +2,12 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { forgotPassword } from '../../lib/api';
+import { ArrowRight, MailCheck } from 'lucide-react';
+import { forgotPassword } from '@/lib/api';
+import { AuthShell } from '@/components/layout/AuthShell';
+import { Field } from '@/components/ui/Field';
+import { Button } from '@/components/ui/Button';
+import { ErrorBanner } from '@/components/ui/ErrorBanner';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
@@ -17,8 +22,10 @@ export default function ForgotPasswordPage() {
     try {
       await forgotPassword(email.trim());
       setSent(true);
-    } catch (err: any) {
-      const message = err?.response?.data?.message || 'Something went wrong — please try again';
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        'Something went wrong — please try again';
       setError(message);
     } finally {
       setLoading(false);
@@ -26,86 +33,47 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <main style={{
-      minHeight: '100vh', backgroundColor: '#0a0a0f',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: '2rem', fontFamily: 'system-ui, sans-serif',
-    }}>
-      <div style={{
-        background: '#12121a', border: '1px solid #1e1e2e',
-        borderRadius: '24px', padding: '40px', width: '100%', maxWidth: '440px',
-      }}>
-        <div style={{ marginBottom: '32px' }}>
-          <Link href="/login" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '14px' }}>
-            ← Back to login
-          </Link>
-          <h1 style={{ fontSize: '30px', fontWeight: '800', color: 'white', marginTop: '16px', marginBottom: '8px' }}>
-            Reset your password 🔑
-          </h1>
-          <p style={{ color: '#6b7280', fontSize: '15px' }}>
-            Enter your email and we'll send you a reset link
-          </p>
-        </div>
-
-        {sent ? (
-          <div style={{
-            background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)',
-            borderRadius: '16px', padding: '24px', textAlign: 'center'
-          }}>
-            <div style={{ fontSize: '40px', marginBottom: '12px' }}>📬</div>
-            <p style={{ color: '#10b981', fontWeight: '700', fontSize: '16px', marginBottom: '8px' }}>
-              Check your inbox
-            </p>
-            <p style={{ color: '#6b7280', fontSize: '14px' }}>
-              If an account exists for <strong style={{ color: 'white' }}>{email}</strong>, a reset link is on its way.
-            </p>
-            <Link href="/login" style={{
-              display: 'inline-block', marginTop: '20px',
-              color: '#a5b4fc', fontSize: '14px', textDecoration: 'none', fontWeight: '600'
-            }}>
-              Back to login →
-            </Link>
+    <AuthShell
+      title="Reset your password"
+      subtitle="Enter your email and we'll send you a reset link."
+      back={{ href: '/login', label: 'Back to login' }}
+    >
+      {sent ? (
+        <div className="flex flex-col items-center gap-5 text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-success/15 shadow-glow-success">
+            <MailCheck className="h-8 w-8 text-success" aria-hidden />
           </div>
-        ) : (
-          <>
-            {error && (
-              <div style={{
-                background: 'rgba(244,63,94,0.1)', border: '1px solid rgba(244,63,94,0.3)',
-                color: '#fb7185', padding: '12px 16px', borderRadius: '12px',
-                marginBottom: '24px', fontSize: '14px',
-              }}>{error}</div>
-            )}
-
-            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <label style={{ color: '#9ca3af', fontSize: '12px' }}>Email address</label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  required
-                  style={{
-                    background: '#0a0a0f', border: '1px solid #1e1e2e',
-                    borderRadius: '12px', padding: '12px 14px', color: 'white',
-                    fontSize: '14px', outline: 'none'
-                  }}
-                />
-              </div>
-
-              <button type="submit" disabled={loading} style={{
-                background: loading ? '#374151' : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                color: 'white', fontWeight: '700', padding: '14px',
-                borderRadius: '12px', border: 'none', fontSize: '15px',
-                cursor: loading ? 'not-allowed' : 'pointer',
-                boxShadow: loading ? 'none' : '0 0 20px rgba(99,102,241,0.3)',
-              }}>
-                {loading ? 'Sending...' : 'Send reset link →'}
-              </button>
-            </form>
-          </>
-        )}
-      </div>
-    </main>
+          <div>
+            <p className="font-heading text-base text-success">Check your inbox</p>
+            <p className="mt-1 text-sm text-paragraph">
+              If an account exists for{' '}
+              <span className="font-medium text-headline">{email}</span>, a reset link is on its way.
+            </p>
+          </div>
+          <Link
+            href="/login"
+            className="focus-ring rounded-md text-sm font-medium text-primary-bright hover:underline"
+          >
+            Back to login
+          </Link>
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {error && <ErrorBanner message={error} />}
+          <Field
+            label="Email address"
+            name="email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com"
+            required
+          />
+          <Button type="submit" fullWidth loading={loading} loadingText="Sending…" className="mt-1">
+            Send reset link <ArrowRight className="h-4 w-4" aria-hidden />
+          </Button>
+        </form>
+      )}
+    </AuthShell>
   );
 }

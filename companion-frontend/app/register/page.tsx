@@ -2,7 +2,12 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { registerUser } from '../../lib/api';
+import { ArrowRight, MailCheck } from 'lucide-react';
+import { registerUser } from '@/lib/api';
+import { AuthShell } from '@/components/layout/AuthShell';
+import { Field } from '@/components/ui/Field';
+import { Button } from '@/components/ui/Button';
+import { ErrorBanner } from '@/components/ui/ErrorBanner';
 
 export default function RegisterPage() {
   const [form, setForm] = useState({ username: '', email: '', password: '' });
@@ -22,7 +27,9 @@ export default function RegisterPage() {
       });
       setRegistered(true);
     } catch (err: unknown) {
-      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Registration failed — please try again';
+      const message =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        'Registration failed — please try again';
       setError(message);
     } finally {
       setLoading(false);
@@ -31,137 +38,77 @@ export default function RegisterPage() {
 
   if (registered) {
     return (
-      <main style={{
-        minHeight: '100vh', backgroundColor: '#0a0a0f',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: '2rem', fontFamily: 'system-ui, sans-serif',
-      }}>
-        <div style={{
-          background: '#12121a', border: '1px solid #1e1e2e',
-          borderRadius: '24px', padding: '40px', width: '100%', maxWidth: '440px',
-          textAlign: 'center',
-        }}>
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>📬</div>
-          <h1 style={{ fontSize: '28px', fontWeight: '800', color: 'white', marginBottom: '12px' }}>
-            Check your email
-          </h1>
-          <p style={{ color: '#9ca3af', fontSize: '15px', lineHeight: '1.6', marginBottom: '8px' }}>
-            We sent a verification link to
-          </p>
-          <p style={{ color: '#a5b4fc', fontWeight: '600', fontSize: '15px', marginBottom: '24px' }}>
-            {form.email}
-          </p>
-          <p style={{ color: '#6b7280', fontSize: '13px', marginBottom: '32px' }}>
-            Click the link in the email to activate your account. The link expires in 24 hours.
-          </p>
-          <p style={{ color: '#6b7280', fontSize: '13px' }}>
-            Didn&apos;t receive it? Check your spam folder.
-          </p>
-          <div style={{ marginTop: '32px' }}>
-            <Link href="/login" style={{ color: '#a5b4fc', textDecoration: 'none', fontWeight: '600', fontSize: '14px' }}>
-              Back to Login
-            </Link>
+      <AuthShell title="Check your email" subtitle="One step left before you're in.">
+        <div className="flex flex-col items-center gap-5 text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-success/15 shadow-glow-success">
+            <MailCheck className="h-8 w-8 text-success" aria-hidden />
           </div>
+          <div>
+            <p className="text-sm text-paragraph">We sent a verification link to</p>
+            <p className="mt-1 font-heading text-base text-primary-bright">{form.email}</p>
+          </div>
+          <p className="text-xs text-muted">
+            Click the link to activate your account. It expires in 24 hours. Don&apos;t see it? Check
+            your spam folder.
+          </p>
+          <Link
+            href="/login"
+            className="focus-ring mt-2 rounded-md text-sm font-medium text-primary-bright hover:underline"
+          >
+            Back to login
+          </Link>
         </div>
-      </main>
+      </AuthShell>
     );
   }
 
   return (
-    <main style={{
-      minHeight: '100vh', backgroundColor: '#0a0a0f',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: '2rem', fontFamily: 'system-ui, sans-serif',
-    }}>
-      <div style={{
-        background: '#12121a', border: '1px solid #1e1e2e',
-        borderRadius: '24px', padding: '40px', width: '100%', maxWidth: '440px',
-      }}>
-        <div style={{ marginBottom: '32px' }}>
-          <Link href="/" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '14px' }}>
-            ← Back
-          </Link>
-          <h1 style={{ fontSize: '32px', fontWeight: '800', color: 'white', marginTop: '16px', marginBottom: '8px' }}>
-            Join Companion 🚀
-          </h1>
-          <p style={{ color: '#6b7280', fontSize: '15px' }}>Start your journey with your people</p>
-        </div>
+    <AuthShell
+      title="Join the grind"
+      subtitle="Create your account and find your circle."
+      back={{ href: '/', label: 'Back' }}
+    >
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        {error && <ErrorBanner message={error} />}
 
-        {error && (
-          <div style={{
-            background: 'rgba(244,63,94,0.1)', border: '1px solid rgba(244,63,94,0.3)',
-            color: '#fb7185', padding: '12px 16px', borderRadius: '12px',
-            marginBottom: '24px', fontSize: '14px',
-          }}>{error}</div>
-        )}
+        <Field
+          label="Username"
+          name="username"
+          value={form.username}
+          onChange={(e) => setForm({ ...form, username: e.target.value })}
+          placeholder="thegrinder"
+          required
+        />
+        <Field
+          label="Email"
+          name="email"
+          type="email"
+          value={form.email}
+          onChange={(e) => setForm({ ...form, email: e.target.value })}
+          placeholder="you@example.com"
+          required
+        />
+        <Field
+          label="Password"
+          name="password"
+          type="password"
+          value={form.password}
+          onChange={(e) => setForm({ ...form, password: e.target.value })}
+          placeholder="Min. 8 characters"
+          required
+        />
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <label style={{ color: '#9ca3af', fontSize: '12px' }}>Username</label>
-            <input
-              type="text"
-              value={form.username}
-              onChange={(e) => setForm({ ...form, username: e.target.value })}
-              placeholder="yourname"
-              required
-              style={{
-                background: '#0a0a0f', border: '1px solid #1e1e2e',
-                borderRadius: '12px', padding: '12px 14px', color: 'white',
-                fontSize: '14px', outline: 'none'
-              }}
-            />
-          </div>
+        <Button type="submit" fullWidth loading={loading} loadingText="Creating…" className="mt-1">
+          Create account <ArrowRight className="h-4 w-4" aria-hidden />
+        </Button>
+      </form>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <label style={{ color: '#9ca3af', fontSize: '12px' }}>Email</label>
-            <input
-              type="email"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-              placeholder="you@example.com"
-              required
-              style={{
-                background: '#0a0a0f', border: '1px solid #1e1e2e',
-                borderRadius: '12px', padding: '12px 14px', color: 'white',
-                fontSize: '14px', outline: 'none'
-              }}
-            />
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <label style={{ color: '#9ca3af', fontSize: '12px' }}>Password</label>
-            <input
-              type="password"
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-              placeholder="••••••••"
-              required
-              style={{
-                background: '#0a0a0f', border: '1px solid #1e1e2e',
-                borderRadius: '12px', padding: '12px 14px', color: 'white',
-                fontSize: '14px', outline: 'none'
-              }}
-            />
-          </div>
-
-          <button type="submit" disabled={loading} style={{
-            background: loading ? '#374151' : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-            color: 'white', fontWeight: '700', padding: '14px',
-            borderRadius: '12px', border: 'none', fontSize: '15px',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            boxShadow: loading ? 'none' : '0 0 20px rgba(99,102,241,0.3)',
-          }}>
-            {loading ? 'Creating account...' : 'Create Account →'}
-          </button>
-        </form>
-
-        <p style={{ textAlign: 'center', color: '#6b7280', marginTop: '24px', fontSize: '14px' }}>
-          Already have an account?{' '}
-          <Link href="/login" style={{ color: '#a5b4fc', textDecoration: 'none', fontWeight: '600' }}>
-            Login
-          </Link>
-        </p>
-      </div>
-    </main>
+      <p className="mt-6 text-center text-sm text-paragraph">
+        Already have an account?{' '}
+        <Link href="/login" className="font-medium text-primary-bright hover:underline">
+          Log in
+        </Link>
+      </p>
+    </AuthShell>
   );
 }

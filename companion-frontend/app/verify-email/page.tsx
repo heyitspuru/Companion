@@ -1,75 +1,87 @@
-"use client";
-import { Suspense, useEffect, useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
-import { API_BASE } from "@/lib/api";
+'use client';
+
+import { Suspense, useEffect, useState } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { CheckCircle2, XCircle } from 'lucide-react';
+import { API_BASE } from '@/lib/api';
+import { AuthShell } from '@/components/layout/AuthShell';
+import { LinkButton } from '@/components/ui/Button';
 
 function VerifyEmailContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
-  const [message, setMessage] = useState("");
+  const token = searchParams.get('token');
+  // Result is only ever set from async callbacks below; the missing-token case
+  // is derived during render so we never call setState synchronously in the
+  // effect (which the lint rule flags as a cascading-render risk).
+  const [result, setResult] = useState<{ status: 'success' | 'error'; message: string } | null>(null);
+
+  const status: 'loading' | 'success' | 'error' = token ? result?.status ?? 'loading' : 'error';
+  const message = token ? result?.message ?? '' : 'Invalid verification link.';
 
   useEffect(() => {
-    const token = searchParams.get("token");
-    if (!token) {
-      setStatus("error");
-      setMessage("Invalid verification link.");
-      return;
-    }
-
-    fetch(`${API_BASE}/api/auth/verify-email?token=${token}`)
-      .then(res => {
+    if (!token) return;
+    fetch(`${API_BASE}/api/auth/verify-email?token=${encodeURIComponent(token)}`)
+      .then((res) => {
         if (res.ok) {
-          setStatus("success");
-          setMessage("Email verified! You can now log in.");
-          setTimeout(() => router.push("/login"), 3000);
+          setResult({ status: 'success', message: 'Email verified! Redirecting you to login…' });
+          setTimeout(() => router.push('/login'), 3000);
         } else {
-          setStatus("error");
-          setMessage("Link expired or already used. Please request a new one.");
+          setResult({
+            status: 'error',
+            message: 'Link expired or already used. Please request a new one.',
+          });
         }
       })
       .catch(() => {
-        setStatus("error");
-        setMessage("Something went wrong. Please try again.");
+        setResult({ status: 'error', message: 'Something went wrong. Please try again.' });
       });
-  }, [searchParams, router]);
+  }, [token, router]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-950">
-      <div className="bg-gray-900 p-8 rounded-2xl text-center max-w-md w-full">
-        <h1 className="text-2xl font-bold text-white mb-4">Email Verification</h1>
-        {status === "loading" && <p className="text-gray-400">Verifying your email...</p>}
-        {status === "success" && (
-          <p className="text-green-400">{message} Redirecting to login...</p>
-        )}
-        {status === "error" && (
-          <>
-            <p className="text-red-400 mb-4">{message}</p>
-            <button
-              onClick={() => router.push("/login")}
-              className="bg-purple-600 text-white px-6 py-2 rounded-lg"
-            >
-              Back to Login
-            </button>
-          </>
-        )}
-      </div>
-    </div>
+    <AuthShell title="Email verification">
+      {status === 'loading' && (
+        <div className="flex flex-col items-center gap-4 py-2 text-center">
+          <div
+            className="h-10 w-10 animate-spin rounded-full border-2 border-border border-t-primary"
+            role="status"
+            aria-label="Verifying"
+          />
+          <p className="text-sm text-paragraph">Verifying your email…</p>
+        </div>
+      )}
+
+      {status === 'success' && (
+        <div className="flex flex-col items-center gap-4 text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-success/15 shadow-glow-success">
+            <CheckCircle2 className="h-8 w-8 text-success" aria-hidden />
+          </div>
+          <p className="font-heading text-base text-success">{message}</p>
+        </div>
+      )}
+
+      {status === 'error' && (
+        <div className="flex flex-col items-center gap-5 text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-danger/15">
+            <XCircle className="h-8 w-8 text-danger" aria-hidden />
+          </div>
+          <p className="text-sm text-paragraph">{message}</p>
+          <LinkButton href="/login" variant="secondary" fullWidth>
+            Back to login
+          </LinkButton>
+        </div>
+      )}
+    </AuthShell>
   );
 }
 
-// useSearchParams must sit inside a Suspense boundary or `next build` fails
-// with "Missing Suspense boundary with useSearchParams" (Next.js 16).
 export default function VerifyEmailPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center bg-gray-950">
-          <div className="bg-gray-900 p-8 rounded-2xl text-center max-w-md w-full">
-            <h1 className="text-2xl font-bold text-white mb-4">Email Verification</h1>
-            <p className="text-gray-400">Verifying your email...</p>
-          </div>
-        </div>
+        <AuthShell title="Email verification">
+          <p className="text-center text-sm text-paragraph">Verifying your email…</p>
+        </AuthShell>
       }
     >
       <VerifyEmailContent />
