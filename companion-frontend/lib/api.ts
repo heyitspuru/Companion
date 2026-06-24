@@ -1,8 +1,10 @@
 import axios from 'axios';
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL
-  ? `${process.env.NEXT_PUBLIC_API_URL}/api`
-  : 'http://localhost:8080/api';
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL
+  ? process.env.NEXT_PUBLIC_API_URL
+  : 'http://localhost:8080';
+
+const BASE_URL = `${API_BASE}/api`;
 
 const getToken = () => {
   if (typeof window !== 'undefined') {

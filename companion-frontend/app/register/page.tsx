@@ -2,36 +2,70 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { registerUser } from '../../lib/api';
 
 export default function RegisterPage() {
-  const router = useRouter();
   const [form, setForm] = useState({ username: '', email: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [registered, setRegistered] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
     try {
-      const res = await registerUser({
+      await registerUser({
         username: form.username.trim(),
         email: form.email.trim(),
         password: form.password,
       });
-      localStorage.setItem('token', res.data.token);
-      localStorage.setItem('username', res.data.username);
-      localStorage.setItem('email', res.data.email);
-      router.push('/dashboard');
-    } catch (err: any) {
-      const message = err?.response?.data?.message || 'Registration failed — please try again';
+      setRegistered(true);
+    } catch (err: unknown) {
+      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Registration failed — please try again';
       setError(message);
     } finally {
       setLoading(false);
     }
   };
+
+  if (registered) {
+    return (
+      <main style={{
+        minHeight: '100vh', backgroundColor: '#0a0a0f',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '2rem', fontFamily: 'system-ui, sans-serif',
+      }}>
+        <div style={{
+          background: '#12121a', border: '1px solid #1e1e2e',
+          borderRadius: '24px', padding: '40px', width: '100%', maxWidth: '440px',
+          textAlign: 'center',
+        }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>📬</div>
+          <h1 style={{ fontSize: '28px', fontWeight: '800', color: 'white', marginBottom: '12px' }}>
+            Check your email
+          </h1>
+          <p style={{ color: '#9ca3af', fontSize: '15px', lineHeight: '1.6', marginBottom: '8px' }}>
+            We sent a verification link to
+          </p>
+          <p style={{ color: '#a5b4fc', fontWeight: '600', fontSize: '15px', marginBottom: '24px' }}>
+            {form.email}
+          </p>
+          <p style={{ color: '#6b7280', fontSize: '13px', marginBottom: '32px' }}>
+            Click the link in the email to activate your account. The link expires in 24 hours.
+          </p>
+          <p style={{ color: '#6b7280', fontSize: '13px' }}>
+            Didn&apos;t receive it? Check your spam folder.
+          </p>
+          <div style={{ marginTop: '32px' }}>
+            <Link href="/login" style={{ color: '#a5b4fc', textDecoration: 'none', fontWeight: '600', fontSize: '14px' }}>
+              Back to Login
+            </Link>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main style={{

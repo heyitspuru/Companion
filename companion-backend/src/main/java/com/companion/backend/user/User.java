@@ -26,6 +26,9 @@ public class User {
     @Column(name = "is_admin", nullable = false, columnDefinition = "boolean default false")
     private boolean admin = false;
 
+    @Column(name = "is_verified", nullable = false, columnDefinition = "boolean default false")
+    private boolean verified = false;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
@@ -38,6 +41,7 @@ public class User {
     public String getPassword() { return password; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public boolean isAdmin() { return admin; }
+    public boolean isVerified() { return verified; }
 
     // Setters
     public void setId(Long id) { this.id = id; }
@@ -46,6 +50,7 @@ public class User {
     public void setPassword(String password) { this.password = password; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
     public void setAdmin(boolean admin) { this.admin = admin; }
+    public void setVerified(boolean verified) { this.verified = verified; }
 
     // Builder
     public static Builder builder() { return new Builder(); }

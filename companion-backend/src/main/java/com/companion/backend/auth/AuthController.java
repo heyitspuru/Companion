@@ -26,6 +26,15 @@ public class AuthController {
         return ResponseEntity.ok(authService.login(request));
     }
 
+    // Hit from the email link via the /verify-email page. Returns 200 on
+    // success; an invalid/expired token surfaces as a 4xx through the
+    // GlobalExceptionHandler, which the page treats as a failed verification.
+    @GetMapping("/verify-email")
+    public ResponseEntity<Void> verifyEmail(@RequestParam String token) {
+        authService.verifyEmail(token);
+        return ResponseEntity.ok().build();
+    }
+
     @PostMapping("/forgot-password")
     public ResponseEntity<Void> forgotPassword(
             @RequestBody ForgotPasswordRequest request) {

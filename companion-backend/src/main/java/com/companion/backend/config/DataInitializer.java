@@ -50,6 +50,9 @@ public class DataInitializer implements ApplicationRunner {
         admin.setEmail(adminEmail);
         admin.setPassword(passwordEncoder.encode(adminPassword));
         admin.setAdmin(true);
+        // Seeded directly, so no verification email is ever sent — mark verified
+        // up front or the login gate would lock the admin out permanently.
+        admin.setVerified(true);
         userRepository.save(admin);
 
         log.info("Admin account created: {}", adminEmail);

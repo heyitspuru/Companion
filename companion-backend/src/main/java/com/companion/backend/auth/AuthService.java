@@ -2,6 +2,7 @@ package com.companion.backend.auth;
 
 import com.companion.backend.common.BadRequestException;
 import com.companion.backend.common.ConflictException;
+import com.companion.backend.common.ForbiddenException;
 import com.companion.backend.common.NotFoundException;
 import com.companion.backend.config.JwtUtil;
 import com.companion.backend.user.User;
@@ -25,6 +26,7 @@ public class AuthService {
     private final JwtUtil jwtUtil;
     private final AuthenticationManager authenticationManager;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
+    private final EmailVerificationTokenRepository emailVerificationTokenRepository;
     private final JavaMailSender mailSender;
 
     public AuthService(UserRepository userRepository,
@@ -32,12 +34,14 @@ public class AuthService {
                        JwtUtil jwtUtil,
                        AuthenticationManager authenticationManager,
                        PasswordResetTokenRepository passwordResetTokenRepository,
+                       EmailVerificationTokenRepository emailVerificationTokenRepository,
                        JavaMailSender mailSender) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
         this.authenticationManager = authenticationManager;
         this.passwordResetTokenRepository = passwordResetTokenRepository;
+        this.emailVerificationTokenRepository = emailVerificationTokenRepository;
         this.mailSender = mailSender;
     }
 
@@ -56,22 +60,69 @@ public class AuthService {
                 .email(request.getEmail())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .build();
-
+        // New accounts start unverified (User.verified defaults to false) and
+        // cannot log in until they click the emailed verification link.
         userRepository.save(user);
 
-        var token = jwtUtil.generateToken(
-                new org.springframework.security.core.userdetails.User(
-                        user.getEmail(),
-                        user.getPassword(),
-                        new ArrayList<>()
-                )
-        );
+        sendVerificationEmail(user.getEmail());
 
+        // No JWT here — registration is not a login. The client shows a
+        // "check your email" screen; the token is issued only after login,
+        // which is gated on verification below.
         return AuthResponse.builder()
-                .token(token)
                 .username(user.getUsername())
                 .email(user.getEmail())
                 .build();
+    }
+
+    private void sendVerificationEmail(String email) {
+        // Replace any prior tokens so only the newest link is valid.
+        emailVerificationTokenRepository.deleteByEmail(email);
+
+        String token = UUID.randomUUID().toString();
+        EmailVerificationToken evt = new EmailVerificationToken();
+        evt.setToken(token);
+        evt.setEmail(email);
+        evt.setExpiresAt(LocalDateTime.now().plusHours(24));
+        evt.setUsed(false);
+        emailVerificationTokenRepository.save(evt);
+
+        try {
+            String verifyLink = System.getenv().getOrDefault("FRONTEND_BASE_URL", "http://localhost:3000")
+                    + "/verify-email?token=" + token;
+
+            SimpleMailMessage msg = new SimpleMailMessage();
+            msg.setTo(email);
+            msg.setSubject("Companion — Verify your email");
+            msg.setText("Welcome to Companion! Confirm your email using the link below "
+                    + "(expires in 24 hours):\n\n"
+                    + verifyLink
+                    + "\n\nIf you did not create this account, ignore this email.");
+            mailSender.send(msg);
+        } catch (Exception e) {
+            System.err.println("Failed to send verification email: " + e.getMessage());
+        }
+    }
+
+    // ── Verify Email ──
+
+    public void verifyEmail(String token) {
+        EmailVerificationToken evt = emailVerificationTokenRepository.findByToken(token)
+                .orElseThrow(() -> new BadRequestException("Invalid token"));
+
+        if (evt.getUsed() || evt.getExpiresAt().isBefore(LocalDateTime.now())) {
+            throw new BadRequestException("Invalid or expired token");
+        }
+
+        User user = userRepository.findByEmail(evt.getEmail())
+                .orElseThrow(() -> new NotFoundException("User not found"));
+
+        user.setVerified(true);
+        userRepository.save(user);
+
+        // Drop every token for this email; a deleted token fails replay at
+        // findByToken, so there's no need to also persist used=true first.
+        emailVerificationTokenRepository.deleteByEmail(user.getEmail());
     }
 
     // ── Login ──
@@ -86,6 +137,11 @@ public class AuthService {
 
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new NotFoundException("User not found"));
+
+        // Credentials are valid, but unverified accounts may not log in.
+        if (!user.isVerified()) {
+            throw new ForbiddenException("Please verify your email before logging in");
+        }
 
         var token = jwtUtil.generateToken(
                 new org.springframework.security.core.userdetails.User(
