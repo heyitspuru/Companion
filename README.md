@@ -4,7 +4,9 @@
 
 **Live:** [`companion-lime.vercel.app`](https://companion-lime.vercel.app)  
 **Backend API:** Azure Container Apps (East Asia, scale-to-zero)  
-**Stack:** Next.js 15 · Spring Boot (Java 19) · PostgreSQL 18 · Azure · Vercel
+**Stack:** Next.js 16 · Spring Boot (Java 19) · PostgreSQL 18 · Azure · Vercel
+
+> **Latest update — June 2026:** Full UI redesign — warm light theme (happyhues #14), display fonts Black Ops One / Russo One / Chakra Petch, a shared component library, and Lucide SVG icons (no emoji). **Email verification is now required before login.** Users can **change their username** from the profile page. Circle creation simplified to a single "Goal" field. Backend running Azure Container Apps image `v4`; CORS is fully env-driven.
 
 ---
 
@@ -206,6 +208,8 @@ JSON response → Next.js updates state → UI re-renders leaderboard
 ## 3. System Design Deep Dive
 
 ### Authentication Flow
+
+> **Updated (June 2026):** Registration no longer auto-logs-in. It creates an account with `is_verified = false`, emails a 24-hour verification link, and returns **no JWT** (the client shows a "check your email" screen). `GET /api/auth/verify-email?token=…` flips `is_verified = true`. **Login is gated:** valid credentials on an unverified account return **403**. The diagrams below show the original happy-path; the verification gate sits between credential check and JWT issuance.
 
 ```
 REGISTRATION
@@ -1013,6 +1017,45 @@ The 15-minute expiry and single-use flag (used: true after consumption)
 prevent replay attacks even if the email is intercepted.
 ```
 
+### Email Verification (Sign-up Gate)
+
+```
+POST /api/auth/register
+  → save user (is_verified = false)
+  → create EmailVerificationToken (UUID, 24h expiry)
+  → email FRONTEND_BASE_URL/verify-email?token=…   (no JWT returned)
+
+GET /api/auth/verify-email?token=…
+  → valid & unexpired   → is_verified = true, tokens cleared → 200
+  → invalid / expired   → 400  (frontend: "link expired, request a new one")
+
+POST /api/auth/login
+  → credentials OK but is_verified = false → 403 ForbiddenException
+
+Notes:
+  • EmailVerificationTokenRepository.deleteByEmail is @Modifying @Transactional
+    (a derived delete needs an active transaction, else register/verify 500).
+  • Seeded admin (DataInitializer) is created is_verified = true so the gate
+    can never lock it out.
+  • Migration for existing prod users (no lockout window):
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified boolean
+        NOT NULL DEFAULT true;   -- new signups still insert false
+```
+
+### Change Username
+
+```
+PUT /api/auth/.. → PUT /api/profile/username   { username }   (auth required)
+  → validate 2–30 chars
+  → 409 if already taken
+  → User.username updated, returns refreshed ProfileResponse
+
+Safe because nothing is denormalized: createdBy, members, badges, check-ins
+and the leaderboard all read the name live through the User FK, and JWT auth
+keys off email — so the change propagates everywhere and never breaks a session.
+The profile page edits it inline and updates localStorage.
+```
+
 ### Badge Award Logic
 
 ```
@@ -1225,6 +1268,9 @@ Even though we reverted, the investigation produced deep, durable knowledge:
 | 4 | Dockerize Spring Boot + Azure Container Registry | ✅ Done |
 | 5 | Azure Container Apps, scale-to-zero | ✅ Done |
 | 6 | Vercel frontend deployment | ✅ Done |
+| + | Email verification + login gate (`is_verified`) | ✅ Done (v4) |
+| + | UI redesign — warm theme + shared component library | ✅ Done |
+| + | Change username from profile · env-driven CORS cleanup | ✅ Done (v4) |
 | 7 | GitHub Actions CI/CD pipeline | 🔲 Planned |
 | 8 | FastAPI AI microservice (Claude API) | 🔲 Planned |
 
