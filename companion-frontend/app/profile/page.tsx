@@ -3,10 +3,11 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Flame, Medal, Trophy, Users, CheckCircle2, LogOut, Star } from 'lucide-react';
-import { getArchivedCircles, getProfile } from '@/lib/api';
+import { Flame, Medal, Trophy, Users, CheckCircle2, LogOut, Star, Pencil, Check, X } from 'lucide-react';
+import { getArchivedCircles, getProfile, updateUsername } from '@/lib/api';
 import { Circle } from '@/types/index';
 import { categoryMeta } from '@/lib/categories';
+import { cn } from '@/lib/cn';
 import { Navbar } from '@/components/layout/Navbar';
 import { Card } from '@/components/ui/Card';
 import { StatTile } from '@/components/ui/StatTile';
@@ -15,6 +16,7 @@ import { Chip } from '@/components/ui/Chip';
 import { ProgressRing } from '@/components/ui/ProgressRing';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LinkButton } from '@/components/ui/Button';
+import { inputClasses } from '@/components/ui/Field';
 import { PageLoader } from '@/components/ui/Skeleton';
 
 interface CircleStat {
@@ -49,6 +51,41 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [archivedCircles, setArchivedCircles] = useState<Circle[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Username editing
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState('');
+  const [nameError, setNameError] = useState('');
+  const [nameSaving, setNameSaving] = useState(false);
+
+  const startEditName = () => {
+    setNameInput(profile?.username || '');
+    setNameError('');
+    setEditingName(true);
+  };
+
+  const saveName = async () => {
+    const next = nameInput.trim();
+    if (!next || next === profile?.username) {
+      setEditingName(false);
+      return;
+    }
+    setNameSaving(true);
+    setNameError('');
+    try {
+      const res = await updateUsername(next);
+      setProfile(res.data);
+      localStorage.setItem('username', res.data.username);
+      setEditingName(false);
+    } catch (err: unknown) {
+      setNameError(
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+          'Could not update username',
+      );
+    } finally {
+      setNameSaving(false);
+    }
+  };
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -110,7 +147,51 @@ export default function ProfilePage() {
             <Chip className="mb-3">
               <Medal className="h-3.5 w-3.5" aria-hidden /> Companion Member
             </Chip>
-            <h1 className="font-display text-4xl text-headline">{profile.username}</h1>
+            {editingName ? (
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-center gap-2 sm:justify-start">
+                  <input
+                    value={nameInput}
+                    onChange={(e) => setNameInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') saveName();
+                      if (e.key === 'Escape') setEditingName(false);
+                    }}
+                    autoFocus
+                    maxLength={30}
+                    aria-label="Username"
+                    className={cn(inputClasses, 'max-w-xs text-2xl')}
+                  />
+                  <button
+                    onClick={saveName}
+                    disabled={nameSaving}
+                    aria-label="Save username"
+                    className="focus-ring flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-success/15 text-success transition-colors hover:bg-success/25 disabled:opacity-50"
+                  >
+                    <Check className="h-4 w-4" aria-hidden />
+                  </button>
+                  <button
+                    onClick={() => setEditingName(false)}
+                    aria-label="Cancel"
+                    className="focus-ring flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border text-muted transition-colors hover:text-headline"
+                  >
+                    <X className="h-4 w-4" aria-hidden />
+                  </button>
+                </div>
+                {nameError && <p className="text-xs text-danger">{nameError}</p>}
+              </div>
+            ) : (
+              <div className="flex items-center justify-center gap-2 sm:justify-start">
+                <h1 className="font-display text-4xl text-headline">{profile.username}</h1>
+                <button
+                  onClick={startEditName}
+                  aria-label="Edit username"
+                  className="focus-ring flex h-8 w-8 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-2 hover:text-headline"
+                >
+                  <Pencil className="h-4 w-4" aria-hidden />
+                </button>
+              </div>
+            )}
             <p className="mt-1 text-sm text-muted">{profile.email}</p>
             <p className="mt-1 text-xs text-muted">
               Member since {getMemberSince(profile.memberSince)} · {daysSince} days on the journey

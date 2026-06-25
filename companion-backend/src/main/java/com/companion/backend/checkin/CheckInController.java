@@ -7,7 +7,6 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/checkins")
-@CrossOrigin(origins = "http://localhost:3000")
 public class CheckInController {
 
     private final CheckInService checkInService;

@@ -2,6 +2,7 @@ package com.companion.backend.user;
 
 import com.companion.backend.badge.BadgeRepository;
 import com.companion.backend.checkin.StreakRepository;
+import com.companion.backend.common.ConflictException;
 import com.companion.backend.circle.CircleMemberRepository;
 import com.companion.backend.circle.CircleRepository;
 import com.companion.backend.goal.GoalRepository;
@@ -18,6 +19,7 @@ import java.util.stream.Collectors;
 public class ProfileService {
 
     private final CurrentUserProvider currentUserProvider;
+    private final UserRepository userRepository;
     private final CircleMemberRepository circleMemberRepository;
     private final BadgeRepository badgeRepository;
     private final StreakRepository streakRepository;
@@ -26,6 +28,7 @@ public class ProfileService {
     private final TaskCheckinRepository taskCheckinRepository;
 
     public ProfileService(CurrentUserProvider currentUserProvider,
+                          UserRepository userRepository,
                           CircleMemberRepository circleMemberRepository,
                           BadgeRepository badgeRepository,
                           StreakRepository streakRepository,
@@ -33,12 +36,32 @@ public class ProfileService {
                           CircleTaskRepository circleTaskRepository,
                           TaskCheckinRepository taskCheckinRepository) {
         this.currentUserProvider = currentUserProvider;
+        this.userRepository = userRepository;
         this.circleMemberRepository = circleMemberRepository;
         this.badgeRepository = badgeRepository;
         this.streakRepository = streakRepository;
         this.goalRepository = goalRepository;
         this.circleTaskRepository = circleTaskRepository;
         this.taskCheckinRepository = taskCheckinRepository;
+    }
+
+    // Change the current user's display name. Safe because no username is
+    // denormalized — every member/badge/leaderboard view reads through the
+    // User FK — and JWT auth keys off email, not username.
+    public ProfileResponse updateUsername(String newUsername) {
+        User user = getCurrentUser();
+        String trimmed = newUsername.trim();
+
+        if (trimmed.equals(user.getUsername())) {
+            return getProfile(); // no-op
+        }
+        if (userRepository.existsByUsername(trimmed)) {
+            throw new ConflictException("Username already taken");
+        }
+
+        user.setUsername(trimmed);
+        userRepository.save(user);
+        return getProfile();
     }
 
     private User getCurrentUser() {

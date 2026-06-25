@@ -116,3 +116,6 @@ export const getCircleStats = (circleId: number) =>
 
 export const getProfile = () =>
   axios.get(`${BASE_URL}/profile`, authHeaders());
+
+export const updateUsername = (username: string) =>
+  axios.put(`${BASE_URL}/profile/username`, { username }, authHeaders());

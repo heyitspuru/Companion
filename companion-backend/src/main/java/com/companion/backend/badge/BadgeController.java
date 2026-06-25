@@ -9,7 +9,6 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/badges")
-@CrossOrigin(origins = "http://localhost:3000")
 public class BadgeController {
 
     private final BadgeService badgeService;
