@@ -6,13 +6,22 @@ spring:
     driver-class-name: org.postgresql.Driver
 
   jpa:
+    # Flyway owns the schema now; Hibernate must NOT auto-alter it in prod.
+    # New columns/tables require a versioned migration (db/migration/V*.sql).
     hibernate:
-      ddl-auto: update
+      ddl-auto: ${DDL_AUTO:none}
     show-sql: ${SHOW_SQL:false}
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: false
+
+  flyway:
+    enabled: true
+    # Existing (Hibernate-built) DBs get baselined at V1 without re-running it;
+    # fresh DBs build the schema from V1__baseline.sql. Future changes = V2+.
+    baseline-on-migrate: true
+    baseline-version: 1
 
   application:
     name: companion-backend

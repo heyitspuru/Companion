@@ -8,6 +8,10 @@ spring:
     username: sa
     password:
     driver-class-name: org.h2.Driver
+  # Tests build the schema with Hibernate on H2; the Postgres Flyway baseline
+  # must not run here.
+  flyway:
+    enabled: false
   jpa:
     hibernate:
       ddl-auto: create-drop
