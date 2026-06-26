@@ -22,7 +22,9 @@ export default function LoginPage() {
     setError('');
     try {
       const res = await loginUser({ email: form.email.trim(), password: form.password });
-      localStorage.setItem('token', res.data.token);
+      // The JWT itself now lives in an httpOnly cookie set by the backend — we
+      // never store it in JS. We keep only non-sensitive identity in
+      // localStorage as a client-side "logged in" hint for routing/display.
       localStorage.setItem('username', res.data.username);
       localStorage.setItem('email', res.data.email);
       router.push('/dashboard');

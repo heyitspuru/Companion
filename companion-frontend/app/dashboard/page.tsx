@@ -6,7 +6,7 @@ import Link from 'next/link';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { Plus, Link2, X, ArrowRight, Users, Flame, CircleUser, LogOut } from 'lucide-react';
-import { getMyCircles, createCircle, joinCircle, addTask } from '@/lib/api';
+import { getMyCircles, createCircle, joinCircle, addTask, logoutUser } from '@/lib/api';
 import { Circle } from '@/types/index';
 import { CATEGORIES, THRESHOLDS, categoryMeta } from '@/lib/categories';
 import { cn } from '@/lib/cn';
@@ -47,13 +47,15 @@ export default function DashboardPage() {
   const [setupLoading, setSetupLoading] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    // The auth token is an httpOnly cookie JS can't read, so we gate the route
+    // on the non-sensitive username hint. The real check is server-side: any
+    // API call without a valid cookie returns 401 and is handled below.
     const user = localStorage.getItem('username');
-    if (!token) {
+    if (!user) {
       router.push('/login');
       return;
     }
-    setUsername(user || '');
+    setUsername(user);
     fetchCircles();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -181,7 +183,9 @@ export default function DashboardPage() {
           <CircleUser className="h-4 w-4" aria-hidden /> {username}
         </Link>
         <button
-          onClick={() => {
+          onClick={async () => {
+            // Clear the httpOnly cookie server-side, then drop the local hint.
+            await logoutUser().catch(() => {});
             localStorage.clear();
             router.push('/');
           }}

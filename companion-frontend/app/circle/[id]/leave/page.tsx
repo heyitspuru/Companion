@@ -35,8 +35,8 @@ export default function LeaveCirclePage() {
   const roast = useMemo(() => ROASTS[Math.floor(Math.random() * ROASTS.length)], []);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) {
+    // Auth is an httpOnly cookie; gate on the local username hint.
+    if (!localStorage.getItem('username')) {
       router.push('/login');
       return;
     }

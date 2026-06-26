@@ -82,14 +82,14 @@ export default function CirclePage() {
   });
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    // Auth is an httpOnly cookie; gate on the local username hint.
     const user = localStorage.getItem('username');
-    if (!token) {
+    if (!user) {
       router.push('/login');
       return;
     }
-    setUsername(user || '');
-    fetchAll(user || '');
+    setUsername(user);
+    fetchAll(user);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

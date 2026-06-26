@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Flame, Medal, Trophy, Users, CheckCircle2, LogOut, Star, Pencil, Check, X } from 'lucide-react';
-import { getArchivedCircles, getProfile, updateUsername } from '@/lib/api';
+import { getArchivedCircles, getProfile, updateUsername, logoutUser } from '@/lib/api';
 import { Circle } from '@/types/index';
 import { categoryMeta } from '@/lib/categories';
 import { cn } from '@/lib/cn';
@@ -88,8 +88,9 @@ export default function ProfilePage() {
   };
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) {
+    // Auth is an httpOnly cookie; gate on the local username hint and let the
+    // server reject (401) if the cookie is missing/expired.
+    if (!localStorage.getItem('username')) {
       router.push('/login');
       return;
     }
@@ -123,7 +124,8 @@ export default function ProfilePage() {
     <div className="min-h-screen text-paragraph">
       <Navbar href="/dashboard" back>
         <button
-          onClick={() => {
+          onClick={async () => {
+            await logoutUser().catch(() => {});
             localStorage.clear();
             router.push('/');
           }}

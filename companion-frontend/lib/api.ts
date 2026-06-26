@@ -1,23 +1,20 @@
 import axios from 'axios';
 
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL
-  ? process.env.NEXT_PUBLIC_API_URL
-  : 'http://localhost:8080';
+// Same-origin: all calls go to this app's own /api/* and are proxied to the
+// backend by the Next.js rewrite (see next.config.ts). That keeps the JWT
+// cookie first-party. Kept exported because a few pages build URLs from it.
+export const API_BASE = '';
 
 const BASE_URL = `${API_BASE}/api`;
 
-const getToken = () => {
-  if (typeof window !== 'undefined') {
-    return localStorage.getItem('token');
-  }
-  return null;
-};
+// The JWT now rides in an httpOnly cookie the browser sends automatically, so
+// JS never touches the token (XSS can't steal it). We only need to opt every
+// request into sending credentials.
+axios.defaults.withCredentials = true;
 
-const authHeaders = () => ({
-  headers: {
-    Authorization: `Bearer ${getToken()}`,
-  },
-});
+// No Authorization header anymore — auth is the cookie. Kept as a no-op config
+// so the many existing call sites don't have to change.
+const authHeaders = () => ({});
 
 // Auth
 export const loginUser = (data: { email: string; password: string }) =>
@@ -25,6 +22,9 @@ export const loginUser = (data: { email: string; password: string }) =>
 
 export const registerUser = (data: { username: string; email: string; password: string }) =>
   axios.post(`${BASE_URL}/auth/register`, data);
+
+export const logoutUser = () =>
+  axios.post(`${BASE_URL}/auth/logout`, {});
 
 export const forgotPassword = (email: string) =>
   axios.post(`${BASE_URL}/auth/forgot-password`, { email });
