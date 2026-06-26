@@ -15,7 +15,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.UUID;
 
 @Service
@@ -142,13 +141,7 @@ public class AuthService {
             throw new ForbiddenException("Please verify your email before logging in");
         }
 
-        var token = jwtUtil.generateToken(
-                new org.springframework.security.core.userdetails.User(
-                        user.getEmail(),
-                        user.getPassword(),
-                        new ArrayList<>()
-                )
-        );
+        var token = jwtUtil.generateToken(user.getEmail(), user.getTokenVersion());
 
         return AuthResponse.builder()
                 .token(token)
@@ -216,6 +209,9 @@ public class AuthService {
                 .orElseThrow(() -> new NotFoundException("User not found"));
 
         user.setPassword(passwordEncoder.encode(newPassword));
+        // Invalidate any JWTs minted before this reset — a stolen/old token must
+        // not survive a password change.
+        user.setTokenVersion(user.getTokenVersion() + 1);
         userRepository.save(user);
 
         // Invalidate every reset token for this email (including the one just

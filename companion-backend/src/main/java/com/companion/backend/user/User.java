@@ -29,6 +29,12 @@ public class User {
     @Column(name = "is_verified", nullable = false, columnDefinition = "boolean default false")
     private boolean verified = false;
 
+    // Bumped whenever every existing session must be invalidated (e.g. a password
+    // reset). Each JWT carries the version it was minted with; the auth filter
+    // rejects any token whose version is behind the user's current one.
+    @Column(name = "token_version", nullable = false, columnDefinition = "integer default 0")
+    private int tokenVersion = 0;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
@@ -42,6 +48,7 @@ public class User {
     public LocalDateTime getCreatedAt() { return createdAt; }
     public boolean isAdmin() { return admin; }
     public boolean isVerified() { return verified; }
+    public int getTokenVersion() { return tokenVersion; }
 
     // Setters
     public void setId(Long id) { this.id = id; }
@@ -51,6 +58,7 @@ public class User {
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
     public void setAdmin(boolean admin) { this.admin = admin; }
     public void setVerified(boolean verified) { this.verified = verified; }
+    public void setTokenVersion(int tokenVersion) { this.tokenVersion = tokenVersion; }
 
     // Builder
     public static Builder builder() { return new Builder(); }

@@ -29,9 +29,15 @@ public class JwtUtil {
         return Keys.hmacShaKeyFor(keyBytes);
     }
 
-    public String generateToken(UserDetails userDetails) {
+    public String generateToken(String email, int tokenVersion) {
         Map<String, Object> claims = new HashMap<>();
-        return createToken(claims, userDetails.getUsername());
+        claims.put("tv", tokenVersion);
+        return createToken(claims, email);
+    }
+
+    public int extractTokenVersion(String token) {
+        Object tv = extractClaim(token, c -> c.get("tv"));
+        return tv instanceof Number ? ((Number) tv).intValue() : 0;
     }
 
     private String createToken(Map<String, Object> claims, String subject) {
