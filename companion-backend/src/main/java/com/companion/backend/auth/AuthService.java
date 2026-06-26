@@ -48,11 +48,11 @@ public class AuthService {
     // ── Register ──
 
     public AuthResponse register(RegisterRequest request) {
-        if (userRepository.existsByEmail(request.getEmail())) {
-            throw new ConflictException("Email already in use");
-        }
-        if (userRepository.existsByUsername(request.getUsername())) {
-            throw new ConflictException("Username already taken");
+        // One generic message for either collision so an attacker can't probe
+        // which emails/usernames are registered by diffing the error text.
+        if (userRepository.existsByEmail(request.getEmail())
+                || userRepository.existsByUsername(request.getUsername())) {
+            throw new ConflictException("Email or username is already in use");
         }
 
         User user = User.builder()

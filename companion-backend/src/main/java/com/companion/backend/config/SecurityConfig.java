@@ -62,6 +62,20 @@ public class SecurityConfig {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
+                // This service only ever returns JSON — it never serves HTML or
+                // scripts — so the strictest CSP applies: deny everything and
+                // forbid being framed. Spring already sets X-Content-Type-Options
+                // and HSTS by default; we add CSP, Referrer-Policy and a locked
+                // Permissions-Policy on top.
+                .headers(headers -> headers
+                        .contentSecurityPolicy(csp ->
+                                csp.policyDirectives("default-src 'none'; frame-ancestors 'none'"))
+                        .referrerPolicy(ref ->
+                                ref.policy(org.springframework.security.web.header.writers
+                                        .ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER))
+                        .permissionsPolicyHeader(pp ->
+                                pp.policy("geolocation=(), camera=(), microphone=(), payment=()"))
+                )
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/auth/**").permitAll()

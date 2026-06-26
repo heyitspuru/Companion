@@ -40,6 +40,12 @@ spring:
 
 server:
   port: ${PORT:8080}
+  # Cap request sizes so a single oversized request can't exhaust memory. All
+  # endpoints take small JSON payloads, so these limits are generous headroom.
+  max-http-request-header-size: 16KB
+  tomcat:
+    max-http-form-post-size: 256KB
+    max-swallow-size: 256KB
 
 jwt:
   secret: ${JWT_SECRET}
