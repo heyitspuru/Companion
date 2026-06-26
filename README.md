@@ -70,11 +70,12 @@ The core insight: **accountability through visibility**. The mild shame of dropp
 │   ┌─────────────────────────────────────────────────────────────┐   │
 │   │              Next.js 15 (TypeScript)                        │   │
 │   │              Vercel Hobby — companion-lime.vercel.app       │   │
-│   │              Tailwind v3 · React Hooks · localStorage JWT   │   │
+│   │              Tailwind v3 · React Hooks · httpOnly cookie JWT │   │
 │   └──────────────────────────┬──────────────────────────────────┘   │
 └──────────────────────────────│──────────────────────────────────────┘
-                               │ HTTPS REST API calls
-                               │ Authorization: Bearer <HS256 JWT>
+                               │ HTTPS — same-origin /api/* proxied
+                               │ (Next.js rewrite) → backend
+                               │ Cookie: token=<HS256 JWT> (httpOnly)
                                ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         API LAYER                                   │
@@ -157,9 +158,12 @@ The core insight: **accountability through visibility**. The mild shame of dropp
 User clicks "Toggle Task" on the frontend
          │
          ▼
-Next.js client calls:
-  PATCH /api/tasks/{taskId}/toggle
-  Header: Authorization: Bearer eyJhbGc...
+Next.js client calls (same-origin):
+  POST /api/tasks/{taskId}/toggle
+  Cookie: token=eyJhbGc...   (httpOnly, sent automatically)
+         │
+         ▼
+Vercel rewrite proxies /api/* → backend (forwards the Cookie)
          │
          ▼
 Azure Container Apps ingress (HTTPS termination)
@@ -167,11 +171,12 @@ Azure Container Apps ingress (HTTPS termination)
          ▼
 Spring Boot — Security Filter Chain:
   ┌─────────────────────────────────────────┐
-  │  1. JwtAuthFilter                       │
-  │     → reads Authorization header        │
-  │     → verifies HS256 signature          │
-  │     → sets SecurityContext principal    │
-  │     → passes to next filter             │
+  │  1. RateLimitFilter (auth endpoints)    │
+  │  2. JwtAuthFilter                       │
+  │     → reads token cookie OR Bearer hdr   │
+  │     → verifies HS256 signature           │
+  │     → checks tv == user.token_version    │
+  │     → sets SecurityContext principal     │
   └──────────────────┬──────────────────────┘
                      │
                      ▼
@@ -209,49 +214,40 @@ JSON response → Next.js updates state → UI re-renders leaderboard
 
 ### Authentication Flow
 
-> **Updated (June 2026):** Registration no longer auto-logs-in. It creates an account with `is_verified = false`, emails a 24-hour verification link, and returns **no JWT** (the client shows a "check your email" screen). `GET /api/auth/verify-email?token=…` flips `is_verified = true`. **Login is gated:** valid credentials on an unverified account return **403**. The diagrams below show the original happy-path; the verification gate sits between credential check and JWT issuance.
+> **Current model (June 2026):**
+> - **Email verification:** Registration does not auto-log-in. It creates an account with `is_verified = false`, emails a 24-hour verification link, and returns **no JWT** (the client shows a "check your email" screen). `GET /api/auth/verify-email?token=…` flips `is_verified = true`. Valid credentials on an unverified account return **403**.
+> - **httpOnly cookie auth (not localStorage):** Login issues the HS256 JWT as an `httpOnly; Secure; SameSite=None` cookie named `token` — JS never touches it, so XSS can't steal it. The browser sends it automatically; the backend also still accepts an `Authorization: Bearer` header for native/API clients.
+> - **First-party via same-origin proxy:** The frontend never calls the backend domain directly. `next.config.ts` rewrites `/api/*` to the backend, so the browser only ever talks to the Vercel origin and the cookie is **first-party** (survives Safari/iOS third-party-cookie blocking).
+> - **Token invalidation:** Each JWT carries a `tv` (token-version) claim. `users.token_version` is bumped on password reset, so the auth filter rejects every token minted before the reset.
 
 ```
-REGISTRATION
+LOGIN (cookie issuance)
 ─────────────────────────────────────────────────────────────
-  Client                     Spring Boot               PostgreSQL
-    │                             │                        │
-    │── POST /api/auth/register──►│                       │
-    │   { username, email, pwd }  │                        │
-    │                             │── BCrypt.hash(pwd) ───►│
-    │                             │── INSERT users ───────►│
-    │                             │◄─ user row ────────────│
-    │                             │── generate HS256 JWT   │
-    │◄── { token, username } ──── │                         │
-    │                             │                        │
-  stores in localStorage          │                        │
-
-
-LOGIN
-─────────────────────────────────────────────────────────────
-  Client                     Spring Boot               PostgreSQL
-    │                             │                        │
-    │── POST /api/auth/login ────►│                        │
-    │   { email, password }       │── SELECT user ────────►│
-    │                             │◄─ user row ────────────│
-    │                             │── BCrypt.verify()      │
-    │                             │── generate HS256 JWT   │
-    │◄── { token, username } ──── │                         │
-    │                             │                        │
-  stores in localStorage          │                        │
+  Browser            Vercel (/api proxy)      Spring Boot        PostgreSQL
+    │                       │                      │                  │
+    │─ POST /api/auth/login►│─ proxy ─────────────►│                  │
+    │   { email, password } │                      │─ SELECT user ───►│
+    │                       │                      │◄─ user row ──────│
+    │                       │                      │─ BCrypt.verify() │
+    │                       │                      │─ is_verified? ───│ (403 if not)
+    │                       │                      │─ HS256 JWT{tv}   │
+    │◄ Set-Cookie: token=…  │◄─ Set-Cookie ────────│                  │
+    │  httpOnly;Secure;       (first-party on        body: {username,email}
+    │  SameSite=None          vercel.app)
+  stores only username/email hint in localStorage (NOT the token)
 
 
 EVERY AUTHENTICATED REQUEST
 ─────────────────────────────────────────────────────────────
-  Client                 JwtAuthFilter            Controller
-    │                         │                        │
-    │── GET /api/circles ────►│                        │
-    │   Bearer: eyJhbGc...    │── HMAC-SHA256 verify   │
-    │                         │── extract userId       │
-    │                         │── set SecurityContext  │
-    │                         │───────────────────────►│
-    │                         │                  handle│
-    │◄────────────────────────────────── response ─────│
+  Browser            Vercel (/api proxy)      JwtAuthFilter        Controller
+    │                       │                      │                   │
+    │─ GET /api/circles ───►│─ proxy + Cookie ────►│                   │
+    │   Cookie: token=…     │                      │─ read cookie OR   │
+    │                       │                      │  Bearer header    │
+    │                       │                      │─ HMAC-SHA256 verify│
+    │                       │                      │─ tv == user.token_version? │
+    │                       │                      │─ set SecurityContext──────►│
+    │◄──────────────────────────────────────────────────── response ──│
 ```
 
 ### Circle Lifecycle State Machine
@@ -457,7 +453,18 @@ public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
 }
 ```
 
-> **Key insight:** `permitAll()` does NOT skip filter execution. `JwtAuthFilter` still runs on public endpoints — it just doesn't throw if the token is missing or invalid. This distinction matters if you add logging or rate-limiting logic to the filter later.
+> **Key insight:** `permitAll()` does NOT skip filter execution. `JwtAuthFilter` still runs on public endpoints — it just doesn't throw if the token is missing or invalid.
+
+**Security hardening (June 2026).** The filter chain and request DTOs add several layers on top of the JWT check:
+
+| Protection | Where | What it does |
+|------------|-------|--------------|
+| **Rate limiting** | `RateLimitFilter` (before auth) | Per-IP fixed window (30 req/min) on `/api/auth/**` — blunts brute-force / credential-stuffing / email-bombing. In-memory (move to Redis if scaled out). |
+| **Security headers** | `SecurityConfig.headers(...)` | Strict `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`, `Referrer-Policy: no-referrer`, locked `Permissions-Policy`, plus Spring's default `X-Content-Type-Options` + HSTS. (This is a JSON-only API — it never serves HTML.) |
+| **Server-side password policy** | `@Size(min=8,max=72)` on `RegisterRequest`/`ResetPasswordRequest` | The 8-char rule is enforced in the API, not just the browser, so it can't be bypassed by calling the endpoint directly. |
+| **Anti-enumeration** | `AuthService.register` | One generic "email or username already in use" message so the endpoint can't be used to probe which accounts exist. |
+| **Token invalidation** | `users.token_version` + `tv` JWT claim | A password reset bumps the version; the filter rejects any token minted before it. |
+| **Request size caps** | `application.yml` (`server.*`) | Bounds header / form-post sizes against oversized-request DoS. |
 
 ### JWT Implementation
 
@@ -556,9 +563,10 @@ AuthService.resetPassword(token, newPassword):
   3. Check: token.expiresAt > now         → else 400
   4. Find user by token.email
   5. user.password = BCrypt.encode(newPassword)
-  6. Save user
-  7. token.used = true — mark consumed
-  8. Return 200
+  6. user.token_version += 1   ← invalidates every JWT issued before the reset
+  7. Save user
+  8. Delete all reset tokens for this email (replay then fails at lookup)
+  9. Return 200
 ```
 
 ### CORS Configuration (Production Fix)
@@ -670,8 +678,9 @@ companion-frontend/
 │       └── page.tsx              ← New password form (reads ?token=)
 │
 ├── lib/
-│   ├── api.ts                    ← All axios calls, auth headers
-│   └── auth.ts                   ← localStorage token helpers
+│   └── api.ts                    ← All axios calls (withCredentials; cookie auth)
+│
+├── next.config.ts                ← /api/* rewrite proxy → backend (first-party cookie)
 │
 └── components/
     ├── Leaderboard.tsx
@@ -684,38 +693,34 @@ companion-frontend/
 
 ### Auth State Management
 
-No Redux, no Zustand. Auth state lives in `localStorage` and is read on every render via a custom hook.
+No Redux, no Zustand. The JWT itself lives in an **httpOnly cookie** the browser sends automatically — JS can't read it. `localStorage` holds only a non-sensitive `username`/`email` hint used for route guards and display; the real auth gate is the server's 401.
 
 ```typescript
-// lib/auth.ts
-export const getToken = (): string | null =>
-  localStorage.getItem('token');
+// lib/api.ts — same-origin proxy + cookie auth
+export const API_BASE = '';            // relative: /api/* is proxied to the backend
+const BASE_URL = `${API_BASE}/api`;
 
-export const getUsername = (): string | null =>
-  localStorage.getItem('username');
+// Auth rides on the httpOnly cookie; just send credentials on every request.
+axios.defaults.withCredentials = true;
 
-export const isLoggedIn = (): boolean =>
-  !!getToken();
+// Login sets the cookie server-side; we persist only the identity hint.
+// (in app/login/page.tsx)
+//   localStorage.setItem('username', res.data.username);
+//   localStorage.setItem('email', res.data.email);
 
-export const logout = (): void => {
-  localStorage.removeItem('token');
-  localStorage.removeItem('username');
-  localStorage.removeItem('email');
-};
+// Logout clears the cookie server-side, then wipes the local hint.
+export const logoutUser = () =>
+  axios.post(`${BASE_URL}/auth/logout`, {});
 
-// lib/api.ts
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL;
+// Route guards check the hint (server still enforces via 401):
+//   if (!localStorage.getItem('username')) router.push('/login');
 
-const authHeaders = () => ({
-  headers: { Authorization: `Bearer ${getToken()}` }
-});
-
-// Usage in any component:
+// Usage in any component — no auth header needed, the cookie travels with it:
 export const getMyCircles = () =>
-  axios.get(`${BASE_URL}/api/circles/my`, authHeaders());
+  axios.get(`${BASE_URL}/circles/my`);
 
 export const toggleTask = (taskId: number) =>
-  axios.patch(`${BASE_URL}/api/tasks/${taskId}/toggle`, {}, authHeaders());
+  axios.post(`${BASE_URL}/tasks/${taskId}/toggle`, {});
 ```
 
 ### Circle Page Layout
@@ -1377,9 +1382,20 @@ MAIL_HOST      → smtp.gmail.com
 MAIL_PORT      → 587
 MAIL_USERNAME  → [gmail address]
 MAIL_PASSWORD  → [gmail app password — 16 chars, no spaces]
-FRONTEND_BASE_URL → https://companion-lime.vercel.app
+FRONTEND_BASE_URL → https://companion-lime.vercel.app   ← SINGLE origin only (see warning)
 CORS_ALLOWED_ORIGINS → https://companion-lime.vercel.app,https://companion-lqgbsvt5h-...
 ```
+
+> ⚠️ **`FRONTEND_BASE_URL` must be ONE origin, not a list.** It is concatenated into the reset/verify email links. If you paste the comma-separated `CORS_ALLOWED_ORIGINS` value into it, the link becomes malformed and email clients linkify the embedded second (stale) URL — sending users to an old build. `CORS_ALLOWED_ORIGINS` is the only var that takes a comma-separated list.
+
+**Cookie attributes** (defaults are prod-safe, so usually unset in prod):
+```
+COOKIE_SECURE   → true   (default; keep true in prod over https)
+COOKIE_SAMESITE → None   (default; first-party through the proxy)
+```
+> **Local dev:** running `next dev` over http means a `Secure` cookie is dropped by the browser. Set `COOKIE_SECURE=false` and `COOKIE_SAMESITE=Lax` on the local backend, or login won't stick.
+
+**Vercel (frontend) env:** the `/api/*` rewrite target resolves from `BACKEND_API_URL` (preferred) or falls back to `NEXT_PUBLIC_API_URL`. Point it at the backend Container App URL.
 
 > Every env var change creates a new Container App **revision**. This is normal. It takes ~60 seconds. Don't assume the change is instant.
 
