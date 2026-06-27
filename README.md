@@ -1304,42 +1304,50 @@ JDBC URL:
 
 ### Phase 4 — Docker Build & Push
 
+**Multi-stage Dockerfile** — compiles the jar *inside* the image, so `docker build` alone always ships current code. (The earlier single-stage version copied a pre-built `target/*.jar`; forgetting to run `mvnw package` first silently shipped a stale jar under a new tag.)
+
 ```dockerfile
-# Dockerfile
-FROM eclipse-temurin:19-jre-alpine
-
+# syntax=docker/dockerfile:1
+# Build stage — Maven + JDK compiles from source
+FROM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /app
+COPY pom.xml .
+COPY src ./src
+# Cache mount keeps ~/.m2 across builds (fast rebuilds, no go-offline layer)
+RUN --mount=type=cache,target=/root/.m2 mvn -B -q clean package -DskipTests
 
-# JAR name must match pom.xml artifactId exactly
-# default: backend-0.0.1-SNAPSHOT.jar (NOT companion-backend-...)
-COPY target/backend-0.0.1-SNAPSHOT.jar app.jar
-
+# Runtime stage — slim JRE only
+FROM eclipse-temurin:19-jre-alpine
+WORKDIR /app
+COPY --from=build /app/target/*.jar app.jar
 EXPOSE 8080
-
 ENTRYPOINT ["java", "-jar", "app.jar"]
 ```
 
+> A `.dockerignore` excludes `target/`, `.git`, `.idea` and build metadata so a stale local jar can't leak into the build context.
+
 ```bash
 # Build steps (from companion-backend/)
+# NOTE: no separate `mvnw package` step — the multi-stage build compiles the
+# jar inside the image. Just bump the tag (vN) and build.
 
-# 1. Package
-./mvnw clean package -DskipTests
-
-# 2. Authenticate with Azure
+# 1. Authenticate with Azure
 az login
 az acr login --name companionregistry01
 
-# 3. Build for linux/amd64
+# 2. Build for linux/amd64
 # ⚠️  --provenance=false is REQUIRED
 # Without it, Docker creates a multi-platform manifest list
 # Azure Container Apps rejects this with "invalid operating system"
 docker build \
   --platform linux/amd64 \
   --provenance=false \
-  -t companionregistry01.azurecr.io/companion-backend:v1 .
+  -t companionregistry01.azurecr.io/companion-backend:v8 .
 
-# 4. Push
-docker push companionregistry01.azurecr.io/companion-backend:v1
+# 3. Push, then point the Container App at the new tag
+docker push companionregistry01.azurecr.io/companion-backend:v8
+az containerapp update -n companion-backend -g companion-rg \
+  --image companionregistry01.azurecr.io/companion-backend:v8
 ```
 
 **Windows ARM64 setup notes:**
