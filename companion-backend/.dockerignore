@@ -1,0 +1,18 @@
+# Keep the build context small AND ensure a stale local build can never leak in.
+# Most importantly: target/ is excluded so the multi-stage build always compiles
+# fresh inside the image instead of picking up a pre-built jar.
+target/
+.git/
+.gitignore
+.gitattributes
+.idea/
+*.iml
+.vscode/
+# Build is done with the Maven image, not the wrapper — these aren't needed.
+mvnw
+mvnw.cmd
+.mvn/
+# Don't ship build metadata into the context.
+Dockerfile
+.dockerignore
+*.md
