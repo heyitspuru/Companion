@@ -29,6 +29,11 @@ import java.util.stream.Collectors;
 @Transactional
 public class CircleService {
 
+    // A squad is a fireteam, not a club. Capped small on purpose: big enough for
+    // a band, small enough that every absence is felt (no diffusion of
+    // responsibility). See PRODUCT.md.
+    private static final int MAX_SQUAD_SIZE = 5;
+
     private final CircleRepository circleRepository;
     private final CircleMemberRepository circleMemberRepository;
     private final GoalRepository goalRepository;
@@ -112,6 +117,12 @@ public class CircleService {
         if (circleMemberRepository.existsByCircleIdAndUserId(
                 circle.getId(), currentUser.getId())) {
             throw new ConflictException("You are already a member of this circle");
+        }
+
+        // A squad maxes out at MAX_SQUAD_SIZE — once full, the fireteam is closed.
+        if (circleMemberRepository.findByCircleId(circle.getId()).size() >= MAX_SQUAD_SIZE) {
+            throw new ConflictException(
+                    "This squad is full (" + MAX_SQUAD_SIZE + " is the limit).");
         }
 
         CircleMember member = CircleMember.builder()

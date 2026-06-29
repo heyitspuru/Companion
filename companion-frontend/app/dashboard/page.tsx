@@ -198,7 +198,7 @@ export default function DashboardPage() {
       <div className="mx-auto max-w-4xl animate-fade-up px-5 py-10 sm:px-6">
         <header className="mb-8">
           <h1 className="flex items-center gap-3 font-display text-4xl text-ink">
-            Your Circles <Flame className="h-8 w-8 text-fire" aria-hidden />
+            Your Squads <Flame className="h-8 w-8 text-fire" aria-hidden />
           </h1>
           <p className="mt-2 text-sm text-ink-soft">
             {circles.length === 0
@@ -215,7 +215,7 @@ export default function DashboardPage() {
               setError('');
             }}
           >
-            <Plus className="h-4 w-4" aria-hidden /> Create Circle
+            <Plus className="h-4 w-4" aria-hidden /> Create Squad
           </Button>
           <Button
             variant="secondary"
@@ -238,18 +238,21 @@ export default function DashboardPage() {
         {/* Create form */}
         {showCreate && (
           <Card className="mb-8">
-            <h2 className="mb-6 font-heading text-xl text-headline">Create a Circle</h2>
+            <h2 className="mb-6 font-heading text-xl text-headline">Form a Squad</h2>
+            <p className="mb-6 -mt-4 text-sm text-paragraph">
+              A fireteam of up to 5. Small on purpose — every absence is felt.
+            </p>
             <form onSubmit={handleCreate} className="flex flex-col gap-4">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field
-                  label="Circle Name"
+                  label="Squad Name"
                   required
                   placeholder="Morning Grind"
                   value={createForm.name}
                   onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
                 />
                 <div className="flex flex-col gap-2">
-                  <label className="text-xs uppercase tracking-wide text-muted">Goal Category</label>
+                  <label className="text-xs uppercase tracking-wide text-muted">Mission Category</label>
                   <select
                     required
                     className={inputClasses}
@@ -266,10 +269,10 @@ export default function DashboardPage() {
               </div>
 
               <Field
-                label="Goal"
+                label="Mission"
                 required
                 placeholder="e.g. Run 5k every morning"
-                hint="One line — what is everyone working toward?"
+                hint="One line — what is the squad working toward?"
                 value={createForm.goalTitle}
                 onChange={(e) => setCreateForm({ ...createForm, goalTitle: e.target.value })}
               />
@@ -357,7 +360,7 @@ export default function DashboardPage() {
 
               <div className="mt-1 flex gap-3">
                 <Button type="submit" loading={actionLoading} loadingText="Creating…">
-                  Create Circle <ArrowRight className="h-4 w-4" aria-hidden />
+                  Create Squad <ArrowRight className="h-4 w-4" aria-hidden />
                 </Button>
                 <Button type="button" variant="ghost" onClick={() => setShowCreate(false)}>
                   Cancel
@@ -370,7 +373,7 @@ export default function DashboardPage() {
         {/* Join form */}
         {showJoin && (
           <Card className="mb-8">
-            <h2 className="mb-6 font-heading text-xl text-headline">Join a Circle</h2>
+            <h2 className="mb-6 font-heading text-xl text-headline">Join a Squad</h2>
             <form onSubmit={handleJoin} className="flex flex-col gap-3 sm:flex-row">
               <input
                 required
@@ -393,8 +396,8 @@ export default function DashboardPage() {
         {circles.length === 0 ? (
           <EmptyState
             icon={Users}
-            title="No circles yet"
-            description="Create one or join with an invite code to get started."
+            title="No squads yet"
+            description="Form one or join with an invite code to get started."
           />
         ) : (
           <div className="grid gap-5">
@@ -415,7 +418,7 @@ export default function DashboardPage() {
                             <CatIcon className="h-3.5 w-3.5" aria-hidden /> {meta.label}
                           </Chip>
                           <span className="text-xs text-muted">
-                            {circle.members.length} member{circle.members.length > 1 ? 's' : ''}
+                            {circle.members.length}/5 in squad
                           </span>
                         </div>
                         <h3 className="font-heading text-2xl text-headline">{circle.name}</h3>
@@ -433,7 +436,7 @@ export default function DashboardPage() {
 
                     <div className="mb-4">
                       <div className="mb-1.5 flex justify-between text-xs">
-                        <span className="text-muted">Goal Progress</span>
+                        <span className="text-muted">Mission Progress</span>
                         <span className="font-medium text-primary-bright">{pct}%</span>
                       </div>
                       <ProgressBar value={pct} />
@@ -451,7 +454,7 @@ export default function DashboardPage() {
                         ))}
                       </div>
                       <span className="inline-flex items-center gap-1 text-sm font-medium text-primary-bright">
-                        View Circle <ArrowRight className="h-4 w-4" aria-hidden />
+                        View Squad <ArrowRight className="h-4 w-4" aria-hidden />
                       </span>
                     </div>
                   </Card>
@@ -473,7 +476,7 @@ export default function DashboardPage() {
         {newlyJoinedCircle && (
           <>
             <div className="mb-7">
-              <Chip className="mb-4">You joined a circle</Chip>
+              <Chip className="mb-4">You joined a squad</Chip>
               <h2 className="font-heading text-2xl text-headline">Set up your tasks</h2>
               <p className="mt-1 text-sm text-paragraph">
                 Add your personal daily tasks for{' '}
