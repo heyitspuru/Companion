@@ -73,10 +73,4 @@ public class CircleController {
             @PathVariable Long circleId) {
         return ResponseEntity.ok(circleService.getCircleStats(circleId));
     }
-
-    @GetMapping("/{circleId}/leaderboard")
-    public ResponseEntity<List<LeaderboardEntry>> getLeaderboard(
-            @PathVariable Long circleId) {
-        return ResponseEntity.ok(circleService.getLeaderboard(circleId));
-    }
 }

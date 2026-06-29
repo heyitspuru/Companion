@@ -5,10 +5,8 @@ import com.companion.backend.circle.Circle;
 import com.companion.backend.circle.CircleMember;
 import com.companion.backend.circle.CircleMemberRepository;
 import com.companion.backend.circle.CircleRepository;
-import com.companion.backend.circle.CircleStatus;
 import com.companion.backend.common.NotFoundException;
 import com.companion.backend.user.User;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.DayOfWeek;
@@ -34,20 +32,10 @@ public class BadgeService {
         this.checkInRepository = checkInRepository;
     }
 
-    // Runs every Monday at 9:00 AM
-    @Scheduled(cron = "0 0 9 * * MON")
-    public void awardWeeklyBadges() {
-        LocalDate weekStart = lastCompletedWeekStart(LocalDate.now());
-        LocalDate weekEnd = weekStart.plusDays(6);
-
-        // Only active circles can earn weekly badges — skip archived/concluded
-        // ones instead of running the full award logic against dead circles.
-        List<Circle> activeCircles = circleRepository.findByStatus(CircleStatus.ACTIVE);
-
-        for (Circle circle : activeCircles) {
-            awardBadgeForCircle(circle, weekStart, weekEnd);
-        }
-    }
+    // The weekly winner-badge cron was removed in the fireteam pivot (PRODUCT.md):
+    // crowning a single "top performer" pits squadmates against each other, which
+    // is the opposite of cohesion. The manual trigger + read endpoints remain so
+    // historical badges still render; no new winner-badges are minted.
 
     // Monday of the most recently completed week, relative to the given day.
     // Both the scheduled job and the manual trigger use this so they always

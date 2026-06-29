@@ -108,9 +108,6 @@ export const getCircleTaskSummary = (circleId: number) =>
 export const updateTask = (taskId: number, title: string) =>
   axios.put(`${BASE_URL}/tasks/${taskId}`, { title }, authHeaders());
 
-export const getCircleLeaderboard = (circleId: number) =>
-  axios.get(`${BASE_URL}/circles/${circleId}/leaderboard`, authHeaders());
-
 export const getCircleStats = (circleId: number) =>
   axios.get(`${BASE_URL}/circles/${circleId}/stats`, authHeaders());
 

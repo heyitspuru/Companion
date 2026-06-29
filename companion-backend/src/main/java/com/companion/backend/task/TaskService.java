@@ -171,6 +171,9 @@ public class TaskService {
 
         updateStreakIfThresholdMet(user, circle, today, thresholdMet);
 
+        // Shared fate: recompute the squad streak after this member's change.
+        updateSquadStreak(circle, today);
+
         return new TaskCheckinResponse(
                 taskId,
                 checkin.getCompleted(),
@@ -222,6 +225,60 @@ public class TaskService {
                 streakRepository.save(streak);
             }
         }
+    }
+
+    // A "squad day" is complete only when EVERY member hits their threshold
+    // (unanimous rule — see PRODUCT.md §9). Mirrors the per-member streak's lazy
+    // increment/rollback so toggling a task off the same day reverses today's gain.
+    private void updateSquadStreak(Circle circle, LocalDate today) {
+        boolean allMet = allMembersMetThreshold(circle, today);
+
+        LocalDate last = circle.getSquadLastCompleteDate();
+        boolean countedToday = today.equals(last);
+
+        if (allMet) {
+            if (!countedToday) {
+                boolean hadYesterday = today.minusDays(1).equals(last);
+                if (hadYesterday || circle.getSquadCurrentStreak() == 0) {
+                    circle.setSquadCurrentStreak(circle.getSquadCurrentStreak() + 1);
+                } else {
+                    circle.setSquadCurrentStreak(1);
+                }
+                if (circle.getSquadCurrentStreak() > circle.getSquadLongestStreak()) {
+                    circle.setSquadLongestStreak(circle.getSquadCurrentStreak());
+                }
+                circle.setSquadLastCompleteDate(today);
+                circleRepository.save(circle);
+            }
+        } else if (countedToday && circle.getSquadCurrentStreak() > 0) {
+            // Was complete earlier today, now broken — undo today's increment only.
+            circle.setSquadCurrentStreak(circle.getSquadCurrentStreak() - 1);
+            circle.setSquadLastCompleteDate(null);
+            circleRepository.save(circle);
+        }
+    }
+
+    private boolean allMembersMetThreshold(Circle circle, LocalDate today) {
+        var members = circleMemberRepository.findByCircleId(circle.getId());
+        if (members.isEmpty()) return false;
+
+        for (var member : members) {
+            User u = member.getUser();
+            List<CircleTask> tasks = circleTaskRepository
+                    .findByCircleIdAndUserIdOrderByDisplayOrderAsc(circle.getId(), u.getId());
+            if (tasks.isEmpty()) return false; // a member with no tasks can't have shown up
+
+            List<Long> taskIds = tasks.stream().map(CircleTask::getId).collect(Collectors.toList());
+            long completed = taskCheckinRepository
+                    .findByUserIdAndTaskIdIn(u.getId(), taskIds)
+                    .stream()
+                    .filter(tc -> tc.getCheckinDate().equals(today) && tc.getCompleted())
+                    .count();
+            int pct = (int) ((completed * 100) / tasks.size());
+
+            if (!circle.isThresholdMet(completed, pct)) return false;
+        }
+        return true;
     }
 
     // Get all members' task completion for today in a circle

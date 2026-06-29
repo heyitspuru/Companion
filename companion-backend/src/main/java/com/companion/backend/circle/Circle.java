@@ -45,6 +45,21 @@ public class Circle {
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
+    // ── Collective (squad) streak ──
+    // Shared fate: the streak belongs to the unit, not the individual. It only
+    // advances on a day when EVERY member hits their threshold (see TaskService).
+    // Stored value advances/rolls back lazily on task toggles; the "live" current
+    // streak (whether it's still alive vs. broken by a missed day) is derived from
+    // squadLastCompleteDate at read time in CircleService#buildCircleResponse.
+    @Column(name = "squad_current_streak", nullable = false, columnDefinition = "integer default 0")
+    private int squadCurrentStreak = 0;
+
+    @Column(name = "squad_longest_streak", nullable = false, columnDefinition = "integer default 0")
+    private int squadLongestStreak = 0;
+
+    @Column(name = "squad_last_complete_date")
+    private java.time.LocalDate squadLastCompleteDate;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
@@ -76,6 +91,9 @@ public class Circle {
     public Integer getCustomThresholdPercent() { return customThresholdPercent; }
     public CircleStatus getStatus() { return status; }
     public LocalDateTime getCreatedAt() { return createdAt; }
+    public int getSquadCurrentStreak() { return squadCurrentStreak; }
+    public int getSquadLongestStreak() { return squadLongestStreak; }
+    public java.time.LocalDate getSquadLastCompleteDate() { return squadLastCompleteDate; }
 
     // Setters
     public void setId(Long id) { this.id = id; }
@@ -88,6 +106,9 @@ public class Circle {
     public void setCustomThresholdPercent(Integer customThresholdPercent) { this.customThresholdPercent = customThresholdPercent; }
     public void setStatus(CircleStatus status) { this.status = status; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+    public void setSquadCurrentStreak(int squadCurrentStreak) { this.squadCurrentStreak = squadCurrentStreak; }
+    public void setSquadLongestStreak(int squadLongestStreak) { this.squadLongestStreak = squadLongestStreak; }
+    public void setSquadLastCompleteDate(java.time.LocalDate d) { this.squadLastCompleteDate = d; }
 
     // Builder
     public static Builder builder() { return new Builder(); }

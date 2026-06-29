@@ -4,11 +4,8 @@ import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
-  Trophy,
-  Medal,
-  Crown,
+  Shield,
   ListChecks,
-  BarChart3,
   Flame,
   Copy,
   Check,
@@ -23,19 +20,17 @@ import {
 } from 'lucide-react';
 import {
   getCircleById,
-  getCircleBadges,
   getMyTasks,
   addTask,
   deleteTask,
   toggleTask,
   getCircleTaskSummary,
   updateTask,
-  getCircleLeaderboard,
   deleteCircle,
   concludeCircle,
   getCircleStats,
 } from '@/lib/api';
-import { Circle, Badge, Task, MemberTaskSummary, LeaderboardEntry } from '@/types/index';
+import { Circle, Task, MemberTaskSummary } from '@/types/index';
 import { thresholdLabel } from '@/lib/categories';
 import { cn } from '@/lib/cn';
 import { Navbar } from '@/components/layout/Navbar';
@@ -54,7 +49,6 @@ export default function CirclePage() {
   const circleId = Number(params.id);
 
   const [circle, setCircle] = useState<Circle | null>(null);
-  const [badges, setBadges] = useState<Badge[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [taskSummary, setTaskSummary] = useState<MemberTaskSummary[]>([]);
   const [username, setUsername] = useState('');
@@ -66,7 +60,6 @@ export default function CirclePage() {
   const [myCompletion, setMyCompletion] = useState(0);
   const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
-  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteInput, setDeleteInput] = useState('');
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -77,7 +70,7 @@ export default function CirclePage() {
   const [conclusionStats, setConclusionStats] = useState({
     totalCheckins: 0,
     bestStreak: 0,
-    badgesAwarded: 0,
+    squadLongestStreak: 0,
     memberCount: 0,
   });
 
@@ -95,18 +88,14 @@ export default function CirclePage() {
 
   const fetchAll = async (user: string) => {
     try {
-      const [circleRes, badgeRes, taskRes, summaryRes, leaderboardRes] = await Promise.all([
+      const [circleRes, taskRes, summaryRes] = await Promise.all([
         getCircleById(circleId),
-        getCircleBadges(circleId),
         getMyTasks(circleId),
         getCircleTaskSummary(circleId),
-        getCircleLeaderboard(circleId),
       ]);
       setCircle(circleRes.data);
-      setBadges(badgeRes.data);
       setTasks(taskRes.data);
       setTaskSummary(summaryRes.data);
-      setLeaderboard(leaderboardRes.data);
       if (circleRes.data.status === 'CONCLUDED' && circleRes.data.createdBy === user) {
         setShowConclusion(true);
         try {
@@ -115,8 +104,8 @@ export default function CirclePage() {
         } catch {
           setConclusionStats({
             totalCheckins: 0,
-            bestStreak: Math.max(0, ...leaderboardRes.data.map((l: LeaderboardEntry) => l.longestStreak)),
-            badgesAwarded: badgeRes.data.length,
+            bestStreak: 0,
+            squadLongestStreak: circleRes.data.squadLongestStreak,
             memberCount: circleRes.data.members.length,
           });
         }
@@ -130,6 +119,17 @@ export default function CirclePage() {
     }
   };
 
+  // After any task change, refresh both the per-member status AND the circle
+  // (so the collective squad streak, recomputed server-side, stays in sync).
+  const refreshSquad = async () => {
+    const [summaryRes, circleRes] = await Promise.all([
+      getCircleTaskSummary(circleId),
+      getCircleById(circleId),
+    ]);
+    setTaskSummary(summaryRes.data);
+    setCircle(circleRes.data);
+  };
+
   const handleToggleTask = async (taskId: number) => {
     try {
       const res = await toggleTask(taskId);
@@ -137,12 +137,7 @@ export default function CirclePage() {
       setTasks((prev) =>
         prev.map((t) => (t.id === taskId ? { ...t, completedToday: res.data.completed } : t)),
       );
-      const [summaryRes, leaderboardRes] = await Promise.all([
-        getCircleTaskSummary(circleId),
-        getCircleLeaderboard(circleId),
-      ]);
-      setTaskSummary(summaryRes.data);
-      setLeaderboard(leaderboardRes.data);
+      await refreshSquad();
     } catch (err) {
       console.error(err);
     }
@@ -169,8 +164,7 @@ export default function CirclePage() {
     try {
       await deleteTask(taskId);
       setTasks((prev) => prev.filter((t) => t.id !== taskId));
-      const summaryRes = await getCircleTaskSummary(circleId);
-      setTaskSummary(summaryRes.data);
+      await refreshSquad();
     } catch (err) {
       console.error(err);
     }
@@ -219,6 +213,11 @@ export default function CirclePage() {
   const mySummary = taskSummary.find((s) => s.username === username);
   const thresholdMet = mySummary?.thresholdMet || false;
 
+  // Squad cohesion signals
+  const reportedIn = taskSummary.filter((m) => m.thresholdMet).length;
+  const squadSize = taskSummary.length || circle.members.length;
+  const squadComplete = circle.squadCompleteToday;
+
   const isCreator = circle.createdBy === username;
   const canDelete = deleteInput.trim().toLowerCase() === circle.name.trim().toLowerCase();
 
@@ -260,9 +259,6 @@ export default function CirclePage() {
     }
   };
 
-  const rankColor = (rank: number) =>
-    rank === 1 ? '#ff8906' : rank === 2 ? '#a7a9be' : rank === 3 ? '#b45309' : '#72757e';
-
   return (
     <div className="min-h-screen text-paragraph">
       <Navbar href="/dashboard" back>
@@ -282,7 +278,7 @@ export default function CirclePage() {
             {circle.goalTitle} · Created by {circle.createdBy}
           </p>
           <p className="mt-1 inline-flex items-center gap-1.5 text-xs text-ink-soft">
-            <CheckCircle2 className="h-3.5 w-3.5" aria-hidden /> Streak threshold:{' '}
+            <CheckCircle2 className="h-3.5 w-3.5" aria-hidden /> Report-in rule:{' '}
             {thresholdLabel(circle.completionThreshold, circle.customThresholdPercent)}
           </p>
         </div>
@@ -290,7 +286,7 @@ export default function CirclePage() {
         {/* Hero strip */}
         <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
           <Card className="flex flex-col items-center">
-            <p className="mb-3 text-xs uppercase tracking-widest text-muted">Goal Progress</p>
+            <p className="mb-3 text-xs uppercase tracking-widest text-muted">Mission Progress</p>
             <ProgressRing
               percent={pct}
               color={progressColor}
@@ -306,25 +302,41 @@ export default function CirclePage() {
             </p>
           </Card>
 
+          {/* Collective squad streak — the headline cohesion metric */}
           <Card
-            tone={thresholdMet ? 'success' : 'default'}
+            tone={squadComplete ? 'success' : 'default'}
             className="flex flex-col items-center justify-center"
           >
-            <p className="mb-2 text-xs uppercase tracking-widest text-muted">Today&apos;s Progress</p>
+            <p className="mb-2 inline-flex items-center gap-1.5 text-xs uppercase tracking-widest text-muted">
+              <Flame className="h-3.5 w-3.5 text-fire" aria-hidden /> Squad Streak
+            </p>
             <div
-              className="font-heading text-5xl"
-              style={{ color: thresholdMet ? '#2cb67d' : '#ff8906' }}
+              className="font-heading text-6xl leading-none"
+              style={{ color: circle.squadCurrentStreak > 0 ? '#ff8906' : '#72757e' }}
             >
-              {myCompletion}%
+              {circle.squadCurrentStreak}
             </div>
-            <div className="mt-1 text-xs text-muted">
-              {myTasksCompleted} / {tasks.length} tasks done
+            <div className="mt-1.5 text-xs text-muted">
+              day{circle.squadCurrentStreak === 1 ? '' : 's'} · longest {circle.squadLongestStreak}
             </div>
-            {thresholdMet && (
-              <div className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-success/30 bg-success/10 px-3 py-1 text-xs font-medium text-success">
-                <Flame className="h-3.5 w-3.5" aria-hidden /> Streak threshold met!
-              </div>
-            )}
+            <div
+              className={cn(
+                'mt-3 inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium',
+                squadComplete
+                  ? 'border-success/30 bg-success/10 text-success'
+                  : 'border-border bg-surface-2 text-paragraph',
+              )}
+            >
+              {squadComplete ? (
+                <>
+                  <CheckCircle2 className="h-3.5 w-3.5" aria-hidden /> Whole squad in today
+                </>
+              ) : (
+                <>
+                  <Clock className="h-3.5 w-3.5 text-gold" aria-hidden /> {reportedIn}/{squadSize} reported in
+                </>
+              )}
+            </div>
           </Card>
 
           <Card className="flex flex-col items-center justify-center gap-3">
@@ -334,7 +346,7 @@ export default function CirclePage() {
             </p>
             <Button
               size="sm"
-              variant={copied ? 'secondary' : 'secondary'}
+              variant="secondary"
               onClick={copyInviteCode}
               className={copied ? 'border-success/40 text-success' : ''}
             >
@@ -351,76 +363,101 @@ export default function CirclePage() {
           </Card>
         </div>
 
-        {/* Main 3-col */}
-        <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[300px_1fr_320px]">
-          {/* Leaderboard */}
-          <Card>
-            <h2 className="mb-4 inline-flex items-center gap-2 font-heading text-base text-headline">
-              <Trophy className="h-4 w-4 text-gold" aria-hidden /> Leaderboard
-            </h2>
-            <div className="flex flex-col gap-2.5">
-              {leaderboard.map((entry) => {
-                const isMe = entry.username === username;
-                const top3 = entry.rank <= 3;
-                return (
-                  <div
-                    key={entry.username}
-                    className={cn(
-                      'flex items-center gap-2.5 rounded-xl border p-3',
-                      isMe
-                        ? 'border-primary/30 bg-primary/[0.08]'
-                        : 'border-border bg-surface-2',
-                    )}
-                  >
-                    <div className="w-7 shrink-0 text-center">
-                      {top3 ? (
-                        entry.rank === 1 ? (
-                          <Crown className="mx-auto h-5 w-5" style={{ color: rankColor(1) }} aria-hidden />
-                        ) : (
-                          <Medal
-                            className="mx-auto h-5 w-5"
-                            style={{ color: rankColor(entry.rank) }}
-                            aria-hidden
-                          />
-                        )
-                      ) : (
-                        <span className="font-heading text-sm text-muted">#{entry.rank}</span>
+        {/* Main 2-col: Squad Status + Tasks */}
+        <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[340px_1fr]">
+          {/* Squad Status — who's in today. No ranking: the unit wins together. */}
+          <div className="flex flex-col gap-4">
+            <Card>
+              <h2 className="mb-1 inline-flex items-center gap-2 font-heading text-base text-headline">
+                <Shield className="h-4 w-4 text-primary-bright" aria-hidden /> Squad Status
+              </h2>
+              <p className="mb-4 text-xs text-muted">
+                {squadComplete
+                  ? 'Everyone showed up. Streak is safe today.'
+                  : `${reportedIn}/${squadSize} in — no one gets left behind.`}
+              </p>
+              <div className="flex flex-col gap-2.5">
+                {taskSummary.map((member) => {
+                  const isMe = member.username === username;
+                  const inToday = member.thresholdMet;
+                  return (
+                    <div
+                      key={member.username}
+                      className={cn(
+                        'flex items-center gap-2.5 rounded-xl border p-3',
+                        inToday ? 'border-success/25 bg-success/[0.06]' : 'border-border bg-surface-2',
                       )}
-                    </div>
-                    <Avatar name={entry.username} size={32} me={isMe} />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <p className="truncate text-sm font-semibold text-headline">{entry.username}</p>
-                        {isMe && (
-                          <span className="shrink-0 rounded-full border border-primary/30 bg-primary/20 px-1.5 text-[9px] font-semibold text-primary-bright">
-                            YOU
-                          </span>
-                        )}
+                    >
+                      <Avatar name={member.username} size={32} me={isMe} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <p className="truncate text-sm font-semibold text-headline">
+                            {member.username}
+                          </p>
+                          {isMe && (
+                            <span className="shrink-0 rounded-full border border-primary/30 bg-primary/20 px-1.5 text-[9px] font-semibold text-primary-bright">
+                              YOU
+                            </span>
+                          )}
+                        </div>
+                        <p
+                          className={cn(
+                            'mt-0.5 text-xs',
+                            inToday ? 'text-success' : 'text-muted',
+                          )}
+                        >
+                          {member.totalTasks === 0
+                            ? 'No tasks set up yet'
+                            : inToday
+                              ? 'Reported in ✓'
+                              : `Not yet · ${member.completionPercent}%`}
+                        </p>
                       </div>
-                      <p className="mt-0.5 inline-flex items-center gap-1 text-xs text-muted">
-                        {entry.currentStreak > 0 ? (
-                          <>
-                            {entry.currentStreak}
-                            <Flame className="h-3 w-3 text-fire" aria-hidden />
-                          </>
+                      <span className="shrink-0">
+                        {inToday ? (
+                          <CheckCircle2 className="h-5 w-5 text-success" aria-hidden />
+                        ) : member.totalTasks === 0 ? (
+                          <FileText className="h-4 w-4 text-muted" aria-hidden />
                         ) : (
-                          '—'
-                        )}{' '}
-                        · {entry.todayCompletionPercent}% today
-                      </p>
+                          <Clock className="h-4 w-4 text-gold" aria-hidden />
+                        )}
+                      </span>
                     </div>
-                    {entry.thresholdMetToday && (
-                      <CheckCircle2 className="h-4 w-4 shrink-0 text-success" aria-hidden />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
+                  );
+                })}
+              </div>
+            </Card>
 
-          {/* Tasks */}
+            {/* Actions */}
+            <Card>
+              {isCreator ? (
+                <div className="rounded-xl border border-danger/30 p-4">
+                  <p className="font-heading text-sm text-headline">Danger Zone</p>
+                  <p className="mb-3 mt-1 text-xs text-paragraph">
+                    Disband this squad and delete all its data permanently.
+                  </p>
+                  <Button variant="danger" fullWidth onClick={() => setShowDeleteConfirm(true)}>
+                    <Trash2 className="h-4 w-4" aria-hidden /> Disband Squad
+                  </Button>
+                </div>
+              ) : (
+                <div>
+                  <p className="mb-2.5 text-xs text-paragraph">Need to step back? You can leave the squad.</p>
+                  <Button
+                    variant="ghost"
+                    fullWidth
+                    onClick={() => router.push(`/circle/${circleId}/leave`)}
+                  >
+                    Leave Squad
+                  </Button>
+                </div>
+              )}
+            </Card>
+          </div>
+
+          {/* My daily tasks — this is how you report in */}
           <Card>
-            <div className="mb-4 flex items-center justify-between">
+            <div className="mb-2 flex items-center justify-between">
               <h2 className="inline-flex items-center gap-2 font-heading text-base text-headline">
                 <ListChecks className="h-4 w-4 text-primary-bright" aria-hidden /> My Daily Tasks
               </h2>
@@ -428,6 +465,11 @@ export default function CirclePage() {
                 <Plus className="h-4 w-4" aria-hidden /> Add Task
               </Button>
             </div>
+            <p className="mb-4 text-xs text-muted">
+              {thresholdMet
+                ? "You're in for today — the squad can count on you."
+                : 'Hit your report-in rule to show up for the squad today.'}
+            </p>
 
             {showAddTask && (
               <form onSubmit={handleAddTask} className="mb-4 flex gap-2.5">
@@ -536,6 +578,12 @@ export default function CirclePage() {
 
             {tasks.length > 0 && (
               <div className="mt-4">
+                <div className="mb-1.5 flex justify-between text-xs">
+                  <span className="text-muted">Today</span>
+                  <span className="font-medium text-primary-bright">
+                    {myTasksCompleted} / {tasks.length} done · {myCompletion}%
+                  </span>
+                </div>
                 <ProgressBar
                   value={myCompletion}
                   fillClass={
@@ -547,127 +595,6 @@ export default function CirclePage() {
               </div>
             )}
           </Card>
-
-          {/* Right column */}
-          <div className="flex flex-col gap-4">
-            {/* Badges */}
-            <Card tone={badges.length > 0 ? 'gold' : 'default'}>
-              <h2 className="mb-4 inline-flex items-center gap-2 font-heading text-base text-headline">
-                <Medal className="h-4 w-4 text-gold" aria-hidden /> Badge of Honor
-              </h2>
-              {badges.length === 0 ? (
-                <div className="flex flex-col items-center gap-1.5 py-5 text-center text-muted">
-                  <Medal className="h-7 w-7" aria-hidden />
-                  <p className="text-sm">No badges yet</p>
-                  <p className="text-xs text-muted/70">Awarded every Monday</p>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-2.5">
-                  {badges
-                    .slice()
-                    .reverse()
-                    .map((badge) => (
-                      <div
-                        key={badge.id}
-                        className="flex items-center gap-3 rounded-xl border border-gold/15 bg-gold/[0.05] p-3"
-                      >
-                        <Medal className="h-6 w-6 shrink-0 text-gold" aria-hidden />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-semibold text-gold">{badge.username}</p>
-                          <p className="mt-0.5 text-xs text-muted">
-                            {badge.checkinCount} check-ins · {badge.weekStart}
-                          </p>
-                        </div>
-                        <span className="shrink-0 rounded-full border border-gold/30 bg-gold/15 px-2.5 py-1 text-xs font-medium text-gold">
-                          Winner
-                        </span>
-                      </div>
-                    ))}
-                </div>
-              )}
-            </Card>
-
-            {/* Circle progress */}
-            <Card>
-              <h2 className="mb-4 inline-flex items-center gap-2 font-heading text-base text-headline">
-                <BarChart3 className="h-4 w-4 text-primary-bright" aria-hidden /> Circle Progress
-              </h2>
-              <div className="flex flex-col gap-2.5">
-                {taskSummary.map((member) => (
-                  <div
-                    key={member.username}
-                    className={cn(
-                      'flex items-center gap-2.5 rounded-xl border p-2.5',
-                      member.thresholdMet ? 'border-success/20' : 'border-border',
-                      'bg-surface-2',
-                    )}
-                  >
-                    <Avatar name={member.username} size={32} />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-headline">{member.username}</p>
-                      <div className="mt-1 flex items-center gap-1.5">
-                        <ProgressBar
-                          value={member.completionPercent}
-                          heightClass="h-1"
-                          fillClass={
-                            member.thresholdMet
-                              ? 'bg-gradient-to-r from-success to-success'
-                              : 'bg-gradient-to-r from-primary to-gold'
-                          }
-                        />
-                        <span
-                          className={cn(
-                            'shrink-0 text-xs',
-                            member.thresholdMet ? 'text-success' : 'text-paragraph',
-                          )}
-                        >
-                          {member.completionPercent}%
-                        </span>
-                      </div>
-                      <p className="mt-1 text-xs text-muted">
-                        {member.completedTasks} / {member.totalTasks} tasks
-                      </p>
-                    </div>
-                    <span className="shrink-0">
-                      {member.thresholdMet ? (
-                        <CheckCircle2 className="h-4 w-4 text-success" aria-hidden />
-                      ) : member.totalTasks === 0 ? (
-                        <FileText className="h-4 w-4 text-muted" aria-hidden />
-                      ) : (
-                        <Clock className="h-4 w-4 text-gold" aria-hidden />
-                      )}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </Card>
-
-            {/* Actions */}
-            <Card>
-              {isCreator ? (
-                <div className="rounded-xl border border-danger/30 p-4">
-                  <p className="font-heading text-sm text-headline">Danger Zone</p>
-                  <p className="mb-3 mt-1 text-xs text-paragraph">
-                    Delete this circle and all associated data permanently.
-                  </p>
-                  <Button variant="danger" fullWidth onClick={() => setShowDeleteConfirm(true)}>
-                    <Trash2 className="h-4 w-4" aria-hidden /> Delete Circle
-                  </Button>
-                </div>
-              ) : (
-                <div>
-                  <p className="mb-2.5 text-xs text-paragraph">Need a break? You can leave the circle.</p>
-                  <Button
-                    variant="ghost"
-                    fullWidth
-                    onClick={() => router.push(`/circle/${circleId}/leave`)}
-                  >
-                    Leave Circle
-                  </Button>
-                </div>
-              )}
-            </Card>
-          </div>
         </div>
       </div>
 
@@ -680,9 +607,9 @@ export default function CirclePage() {
         }}
         maxWidthClass="max-w-md"
       >
-        <h3 className="font-heading text-xl text-headline">Delete {circle.name}?</h3>
+        <h3 className="font-heading text-xl text-headline">Disband {circle.name}?</h3>
         <p className="mt-2 text-sm text-paragraph">
-          This will permanently delete {circle.name} and all data. Type{' '}
+          This will permanently delete {circle.name} and all its data. Type{' '}
           <span className="font-medium text-headline">{circle.name.toUpperCase()}</span> to confirm.
         </p>
         <input
@@ -708,9 +635,9 @@ export default function CirclePage() {
             onClick={handleDeleteCircle}
             disabled={!canDelete}
             loading={deleteLoading}
-            loadingText="Deleting…"
+            loadingText="Disbanding…"
           >
-            Delete
+            Disband
           </Button>
         </div>
       </Modal>
@@ -720,17 +647,17 @@ export default function CirclePage() {
         <div className="mb-6 text-center">
           <PartyPopper className="mx-auto mb-3 h-10 w-10 text-gold" aria-hidden />
           <h2 className="font-heading text-2xl text-headline">
-            You did it. {circle.name} is complete.
+            Mission complete. {circle.name} made it.
           </h2>
-          <p className="mt-1 text-sm text-paragraph">Close it as an achievement or extend the journey.</p>
+          <p className="mt-1 text-sm text-paragraph">Close it out as an achievement or extend the mission.</p>
         </div>
 
         <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[
             { label: 'Total Check-ins', value: conclusionStats.totalCheckins },
-            { label: 'Best Streak', value: conclusionStats.bestStreak },
-            { label: 'Badges', value: conclusionStats.badgesAwarded },
-            { label: 'Members', value: conclusionStats.memberCount },
+            { label: 'Best Member Streak', value: conclusionStats.bestStreak },
+            { label: 'Squad Streak', value: conclusionStats.squadLongestStreak },
+            { label: 'Squad Size', value: conclusionStats.memberCount },
           ].map((stat) => (
             <div
               key={stat.label}
@@ -764,7 +691,7 @@ export default function CirclePage() {
             onClick={() => setShowExtendPicker(true)}
             disabled={concludeLoading}
           >
-            Extend the Circle
+            Extend the Mission
           </Button>
         </div>
 

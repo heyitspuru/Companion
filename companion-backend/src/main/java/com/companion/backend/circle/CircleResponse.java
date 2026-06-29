@@ -24,6 +24,11 @@ public class CircleResponse {
     private CompletionThreshold completionThreshold;
     private Integer customThresholdPercent;
 
+    // Collective squad streak (live values — see CircleService#buildCircleResponse)
+    private int squadCurrentStreak;
+    private int squadLongestStreak;
+    private boolean squadCompleteToday;
+
     // Getters
     public Long getId() { return id; }
     public String getName() { return name; }
@@ -39,6 +44,9 @@ public class CircleResponse {
     public LocalDate getGoalEndDate() { return goalEndDate; }
     public CompletionThreshold getCompletionThreshold() { return completionThreshold; }
     public Integer getCustomThresholdPercent() { return customThresholdPercent; }
+    public int getSquadCurrentStreak() { return squadCurrentStreak; }
+    public int getSquadLongestStreak() { return squadLongestStreak; }
+    public boolean isSquadCompleteToday() { return squadCompleteToday; }
 
     // Setters
     public void setId(Long id) { this.id = id; }
@@ -55,6 +63,9 @@ public class CircleResponse {
     public void setGoalEndDate(LocalDate goalEndDate) { this.goalEndDate = goalEndDate; }
     public void setCompletionThreshold(CompletionThreshold completionThreshold) { this.completionThreshold = completionThreshold; }
     public void setCustomThresholdPercent(Integer customThresholdPercent) { this.customThresholdPercent = customThresholdPercent; }
+    public void setSquadCurrentStreak(int v) { this.squadCurrentStreak = v; }
+    public void setSquadLongestStreak(int v) { this.squadLongestStreak = v; }
+    public void setSquadCompleteToday(boolean v) { this.squadCompleteToday = v; }
 
     // Nested MemberInfo class
     public static class MemberInfo {
@@ -91,6 +102,9 @@ public class CircleResponse {
         private LocalDate goalEndDate;
         private CompletionThreshold completionThreshold;
         private Integer customThresholdPercent;
+        private int squadCurrentStreak;
+        private int squadLongestStreak;
+        private boolean squadCompleteToday;
 
         public Builder id(Long id) { this.id = id; return this; }
         public Builder name(String name) { this.name = name; return this; }
@@ -106,6 +120,9 @@ public class CircleResponse {
         public Builder goalEndDate(LocalDate goalEndDate) { this.goalEndDate = goalEndDate; return this; }
         public Builder completionThreshold(CompletionThreshold t) { this.completionThreshold = t; return this; }
         public Builder customThresholdPercent(Integer p) { this.customThresholdPercent = p; return this; }
+        public Builder squadCurrentStreak(int v) { this.squadCurrentStreak = v; return this; }
+        public Builder squadLongestStreak(int v) { this.squadLongestStreak = v; return this; }
+        public Builder squadCompleteToday(boolean v) { this.squadCompleteToday = v; return this; }
 
         public CircleResponse build() {
             CircleResponse r = new CircleResponse();
@@ -123,6 +140,9 @@ public class CircleResponse {
             r.setGoalEndDate(this.goalEndDate);
             r.setCompletionThreshold(this.completionThreshold);
             r.setCustomThresholdPercent(this.customThresholdPercent);
+            r.setSquadCurrentStreak(this.squadCurrentStreak);
+            r.setSquadLongestStreak(this.squadLongestStreak);
+            r.setSquadCompleteToday(this.squadCompleteToday);
             return r;
         }
     }

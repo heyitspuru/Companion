@@ -25,6 +25,11 @@ export interface Circle {
   goalEndDate: string;
   completionThreshold: string;
   customThresholdPercent: number | null;
+  // Collective squad streak (fireteam pivot). Live values: squadCurrentStreak is
+  // 0 if a missed day broke it; squadCompleteToday = whole unit reported in today.
+  squadCurrentStreak: number;
+  squadLongestStreak: number;
+  squadCompleteToday: boolean;
 }
 
 export interface CheckIn {

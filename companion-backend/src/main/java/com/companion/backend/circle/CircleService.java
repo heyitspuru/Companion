@@ -265,7 +265,7 @@ public class CircleService {
     // ── Circle stats (for conclusion overlay) ──
 
     public Map<String, Object> getCircleStats(Long circleId) {
-        circleRepository.findById(circleId)
+        Circle circle = circleRepository.findById(circleId)
                 .orElseThrow(() -> new NotFoundException("Circle not found"));
 
         List<CircleMember> members = circleMemberRepository.findByCircleId(circleId);
@@ -287,76 +287,13 @@ public class CircleService {
                 .max()
                 .orElse(0);
 
-        // Total badges awarded
-        long badgesAwarded = badgeRepository.findByCircleId(circleId).size();
-
         Map<String, Object> stats = new HashMap<>();
         stats.put("totalCheckins", totalCheckins);
         stats.put("bestStreak", bestStreak);
-        stats.put("badgesAwarded", badgesAwarded);
+        stats.put("squadLongestStreak", circle.getSquadLongestStreak());
         stats.put("memberCount", members.size());
 
         return stats;
-    }
-
-    // ── Leaderboard ──
-
-    public List<LeaderboardEntry> getLeaderboard(Long circleId) {
-        Circle circle = circleRepository.findById(circleId)
-                .orElseThrow(() -> new NotFoundException("Circle not found"));
-
-        List<CircleMember> members = circleMemberRepository.findByCircleId(circleId);
-        LocalDate today = LocalDate.now();
-
-        // Fetch the circle's badges once, then count per member in memory —
-        // previously this query ran once per member (an N+1 inside the loop).
-        Map<Long, Long> badgeCountByUser = badgeRepository.findByCircleId(circleId)
-                .stream()
-                .collect(Collectors.groupingBy(
-                        b -> b.getUser().getId(), Collectors.counting()));
-
-        List<LeaderboardEntry> entries = members.stream().map(member -> {
-            var user = member.getUser();
-
-            var streak = streakRepository.findByUserIdAndCircleId(user.getId(), circleId)
-                    .orElse(null);
-            int currentStreak = streak != null ? streak.getCurrentStreak() : 0;
-            int longestStreak = streak != null ? streak.getLongestStreak() : 0;
-
-            var tasks = circleTaskRepository
-                    .findByCircleIdAndUserIdOrderByDisplayOrderAsc(circleId, user.getId());
-            List<Long> taskIds = tasks.stream()
-                    .map(t -> t.getId()).collect(Collectors.toList());
-            long completedToday = taskIds.isEmpty() ? 0 :
-                    taskCheckinRepository.findByUserIdAndTaskIdIn(user.getId(), taskIds)
-                            .stream()
-                            .filter(tc -> tc.getCheckinDate().equals(today) && tc.getCompleted())
-                            .count();
-            int completionPct = tasks.isEmpty() ? 0 :
-                    (int) ((completedToday * 100) / tasks.size());
-
-            boolean thresholdMet = !tasks.isEmpty()
-                    && circle.isThresholdMet(completedToday, completionPct);
-
-            int badgeCount = badgeCountByUser.getOrDefault(user.getId(), 0L).intValue();
-
-            return new LeaderboardEntry(0, user.getUsername(), currentStreak,
-                    longestStreak, completionPct, badgeCount, thresholdMet);
-        }).collect(Collectors.toList());
-
-        entries.sort((a, b) -> {
-            if (!b.getCurrentStreak().equals(a.getCurrentStreak()))
-                return b.getCurrentStreak() - a.getCurrentStreak();
-            if (!b.getTodayCompletionPercent().equals(a.getTodayCompletionPercent()))
-                return b.getTodayCompletionPercent() - a.getTodayCompletionPercent();
-            return b.getLongestStreak() - a.getLongestStreak();
-        });
-
-        for (int i = 0; i < entries.size(); i++) {
-            entries.get(i).setRank(i + 1);
-        }
-
-        return entries;
     }
 
     // ── Internal builder ──
@@ -379,6 +316,14 @@ public class CircleService {
         }
         Goal goal = goals.isEmpty() ? null : goals.get(0);
 
+        // Live squad streak: the stored value is only "alive" if the squad
+        // completed today or yesterday; an intervening missed day breaks it.
+        LocalDate last = circle.getSquadLastCompleteDate();
+        LocalDate today = LocalDate.now();
+        boolean completeToday = today.equals(last);
+        boolean alive = last != null && (completeToday || today.minusDays(1).equals(last));
+        int liveCurrent = alive ? circle.getSquadCurrentStreak() : 0;
+
         CircleResponse.Builder builder = CircleResponse.builder()
                 .id(circle.getId())
                 .name(circle.getName())
@@ -388,7 +333,10 @@ public class CircleService {
                 .status(circle.getStatus())
                 .members(memberInfos)
                 .completionThreshold(circle.getCompletionThreshold())
-                .customThresholdPercent(circle.getCustomThresholdPercent());
+                .customThresholdPercent(circle.getCustomThresholdPercent())
+                .squadCurrentStreak(liveCurrent)
+                .squadLongestStreak(circle.getSquadLongestStreak())
+                .squadCompleteToday(completeToday);
 
         if (goal != null) {
             builder.goalTitle(goal.getTitle())
