@@ -1,5 +1,6 @@
 package com.companion.backend.auth;
 
+import com.companion.backend.common.AppUrls;
 import com.companion.backend.common.BadRequestException;
 import com.companion.backend.common.ConflictException;
 import com.companion.backend.common.ForbiddenException;
@@ -87,7 +88,7 @@ public class AuthService {
         emailVerificationTokenRepository.save(evt);
 
         try {
-            String verifyLink = frontendBaseUrl() + "/verify-email?token=" + token;
+            String verifyLink = AppUrls.frontendBaseUrl() + "/verify-email?token=" + token;
 
             SimpleMailMessage msg = new SimpleMailMessage();
             msg.setTo(email);
@@ -150,22 +151,6 @@ public class AuthService {
                 .build();
     }
 
-    // Resolves the single frontend origin used to build email links.
-    // FRONTEND_BASE_URL is sometimes (mis)configured with the same comma-separated
-    // value as CORS_ALLOWED_ORIGINS. Since this is concatenated into a clickable
-    // link, a list would produce a malformed URL whose embedded second origin —
-    // a pinned/stale Vercel deployment — is what email clients linkify, sending
-    // users to the old build. Defensively take only the first entry and strip any
-    // trailing slash so the path we append is well-formed.
-    private String frontendBaseUrl() {
-        String raw = System.getenv().getOrDefault("FRONTEND_BASE_URL", "http://localhost:3000");
-        String first = raw.split(",")[0].trim();
-        if (first.endsWith("/")) {
-            first = first.substring(0, first.length() - 1);
-        }
-        return first;
-    }
-
     // ── Forgot Password ──
 
     public void forgotPassword(String email) {
@@ -180,7 +165,7 @@ public class AuthService {
         passwordResetTokenRepository.save(prt);
 
         try {
-            String resetLink = frontendBaseUrl() + "/reset-password?token=" + token;
+            String resetLink = AppUrls.frontendBaseUrl() + "/reset-password?token=" + token;
 
             SimpleMailMessage msg = new SimpleMailMessage();
             msg.setTo(email);

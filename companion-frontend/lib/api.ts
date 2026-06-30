@@ -42,7 +42,12 @@ export const createCircle = (data: {
   endDate: string;
   completionThreshold: string;
   customThresholdPercent?: number | null;
+  timezone?: string;
 }) => axios.post(`${BASE_URL}/circles/create`, data, authHeaders());
+
+// Rally — "I've got you". Back an at-risk squadmate; returns refreshed squad status.
+export const rally = (circleId: number, username: string) =>
+  axios.post(`${BASE_URL}/circles/${circleId}/rally`, { username }, authHeaders());
 
 export const joinCircle = (inviteCode: string) =>
   axios.post(`${BASE_URL}/circles/join/${inviteCode}`, {}, authHeaders());

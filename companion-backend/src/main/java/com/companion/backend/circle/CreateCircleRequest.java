@@ -30,6 +30,10 @@ public class CreateCircleRequest {
 
     private Integer customThresholdPercent;
 
+    // IANA timezone auto-detected from the creator's browser; the squad's daily
+    // boundary and at-risk cutoff resolve in this zone. Nullable → falls back to UTC.
+    private String timezone;
+
     // A CUSTOM threshold is meaningless without a percent; reject it at the edge
     // instead of silently defaulting to 100 (which makes CUSTOM == ALL_TASKS).
     @AssertTrue(message = "customThresholdPercent (1-100) is required when completionThreshold is CUSTOM")
@@ -51,6 +55,7 @@ public class CreateCircleRequest {
     public LocalDate getEndDate() { return endDate; }
     public CompletionThreshold getCompletionThreshold() { return completionThreshold; }
     public Integer getCustomThresholdPercent() { return customThresholdPercent; }
+    public String getTimezone() { return timezone; }
 
     // Setters
     public void setName(String name) { this.name = name; }
@@ -61,4 +66,5 @@ public class CreateCircleRequest {
     public void setEndDate(LocalDate endDate) { this.endDate = endDate; }
     public void setCompletionThreshold(CompletionThreshold completionThreshold) { this.completionThreshold = completionThreshold; }
     public void setCustomThresholdPercent(Integer customThresholdPercent) { this.customThresholdPercent = customThresholdPercent; }
+    public void setTimezone(String timezone) { this.timezone = timezone; }
 }

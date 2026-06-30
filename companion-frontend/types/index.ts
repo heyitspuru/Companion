@@ -74,6 +74,10 @@ export interface MemberTaskSummary {
   totalTasks: number;
   completionPercent: number;
   thresholdMet: boolean;
+  // Rally state (Phase 2)
+  atRisk: boolean;
+  rallied: boolean;
+  backedBy: string[];
 }
 
 export interface LeaderboardEntry {

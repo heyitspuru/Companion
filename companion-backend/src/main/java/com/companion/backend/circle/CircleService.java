@@ -43,6 +43,9 @@ public class CircleService {
     private final CircleTaskRepository circleTaskRepository;
     private final TaskCheckinRepository taskCheckinRepository;
     private final CheckInRepository checkinRepository;
+    private final RallyRepository rallyRepository;
+    private final com.companion.backend.notification.RallyEmailService rallyEmailService;
+    private final com.companion.backend.task.TaskService taskService;
 
     public CircleService(CircleRepository circleRepository,
                          CircleMemberRepository circleMemberRepository,
@@ -52,7 +55,10 @@ public class CircleService {
                          BadgeRepository badgeRepository,
                          CircleTaskRepository circleTaskRepository,
                          TaskCheckinRepository taskCheckinRepository,
-                         CheckInRepository checkinRepository) {
+                         CheckInRepository checkinRepository,
+                         RallyRepository rallyRepository,
+                         com.companion.backend.notification.RallyEmailService rallyEmailService,
+                         com.companion.backend.task.TaskService taskService) {
         this.circleRepository = circleRepository;
         this.circleMemberRepository = circleMemberRepository;
         this.goalRepository = goalRepository;
@@ -62,6 +68,9 @@ public class CircleService {
         this.circleTaskRepository = circleTaskRepository;
         this.taskCheckinRepository = taskCheckinRepository;
         this.checkinRepository = checkinRepository;
+        this.rallyRepository = rallyRepository;
+        this.rallyEmailService = rallyEmailService;
+        this.taskService = taskService;
     }
 
     private User getCurrentUser() {
@@ -79,6 +88,7 @@ public class CircleService {
                 .inviteCode(UUID.randomUUID().toString().substring(0, 8).toUpperCase())
                 .completionThreshold(request.getCompletionThreshold())
                 .customThresholdPercent(request.getCustomThresholdPercent())
+                .timezone(request.getTimezone())
                 .build();
 
         circleRepository.save(circle);
@@ -296,6 +306,64 @@ public class CircleService {
         return stats;
     }
 
+    // ── Rally ("I've got you") ──
+
+    /**
+     * The caller backs an at-risk squadmate. Records the rally (once per day),
+     * emails the target, and returns the refreshed squad status.
+     */
+    public List<com.companion.backend.task.MemberTaskSummary> rally(Long circleId, String targetUsername) {
+        User caller = getCurrentUser();
+        Circle circle = circleRepository.findById(circleId)
+                .orElseThrow(() -> new NotFoundException("Circle not found"));
+
+        if (!circleMemberRepository.existsByCircleIdAndUserId(circleId, caller.getId())) {
+            throw new ForbiddenException("You are not a member of this squad");
+        }
+
+        User target = circleMemberRepository.findByCircleId(circleId).stream()
+                .map(CircleMember::getUser)
+                .filter(u -> u.getUsername().equals(targetUsername))
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("That squadmate isn't in this squad"));
+
+        if (target.getId().equals(caller.getId())) {
+            throw new BadRequestException("You can't rally yourself — get in.");
+        }
+
+        // Can't rally someone who's already reported in today.
+        var summary = taskService.getCircleTaskSummary(circleId);
+        var targetSummary = summary.stream()
+                .filter(s -> s.getUsername().equals(targetUsername))
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("That squadmate isn't in this squad"));
+        if (Boolean.TRUE.equals(targetSummary.getThresholdMet())) {
+            throw new BadRequestException(targetUsername + " has already reported in today.");
+        }
+
+        // One rally per (squad, from, to, day) — re-tapping is a no-op, no re-email.
+        LocalDate today = circle.today();
+        boolean firstToday = rallyRepository
+                .findByCircleIdAndFromUserIdAndToUserIdAndRallyDate(
+                        circleId, caller.getId(), target.getId(), today)
+                .isEmpty();
+
+        if (firstToday) {
+            Rally rally = new Rally();
+            rally.setCircle(circle);
+            rally.setFromUser(caller);
+            rally.setToUser(target);
+            rally.setRallyDate(today);
+            rallyRepository.save(rally);
+
+            rallyEmailService.sendRally(
+                    target.getEmail(), target.getUsername(), caller.getUsername(),
+                    circle.getName(), circleId, circle.getSquadCurrentStreak());
+        }
+
+        return taskService.getCircleTaskSummary(circleId);
+    }
+
     // ── Internal builder ──
 
     private CircleResponse buildCircleResponse(Circle circle) {
@@ -319,7 +387,7 @@ public class CircleService {
         // Live squad streak: the stored value is only "alive" if the squad
         // completed today or yesterday; an intervening missed day breaks it.
         LocalDate last = circle.getSquadLastCompleteDate();
-        LocalDate today = LocalDate.now();
+        LocalDate today = circle.today();
         boolean completeToday = today.equals(last);
         boolean alive = last != null && (completeToday || today.minusDays(1).equals(last));
         int liveCurrent = alive ? circle.getSquadCurrentStreak() : 0;

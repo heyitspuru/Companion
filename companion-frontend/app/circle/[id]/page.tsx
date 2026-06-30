@@ -5,6 +5,8 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   Shield,
+  ShieldAlert,
+  HeartHandshake,
   ListChecks,
   Flame,
   Copy,
@@ -29,6 +31,7 @@ import {
   deleteCircle,
   concludeCircle,
   getCircleStats,
+  rally,
 } from '@/lib/api';
 import { Circle, Task, MemberTaskSummary } from '@/types/index';
 import { thresholdLabel } from '@/lib/categories';
@@ -143,6 +146,20 @@ export default function CirclePage() {
     }
   };
 
+  const [rallyingUser, setRallyingUser] = useState<string | null>(null);
+
+  const handleRally = async (targetUsername: string) => {
+    setRallyingUser(targetUsername);
+    try {
+      const res = await rally(circleId, targetUsername);
+      setTaskSummary(res.data); // refreshed squad status (now shows "backed by")
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setRallyingUser(null);
+    }
+  };
+
   const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTaskTitle.trim()) return;
@@ -217,6 +234,7 @@ export default function CirclePage() {
   const reportedIn = taskSummary.filter((m) => m.thresholdMet).length;
   const squadSize = taskSummary.length || circle.members.length;
   const squadComplete = circle.squadCompleteToday;
+  const myBackers = mySummary?.backedBy ?? [];
 
   const isCreator = circle.createdBy === username;
   const canDelete = deleteInput.trim().toLowerCase() === circle.name.trim().toLowerCase();
@@ -376,16 +394,35 @@ export default function CirclePage() {
                   ? 'Everyone showed up. Streak is safe today.'
                   : `${reportedIn}/${squadSize} in — no one gets left behind.`}
               </p>
+
+              {/* "X has your back" — the in-app channel for the rallied member */}
+              {myBackers.length > 0 && !mySummary?.thresholdMet && (
+                <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-primary/30 bg-primary/[0.08] p-3">
+                  <HeartHandshake className="mt-0.5 h-4 w-4 shrink-0 text-primary-bright" aria-hidden />
+                  <p className="text-xs text-headline">
+                    <span className="font-semibold text-primary-bright">
+                      {myBackers.join(', ')}
+                    </span>{' '}
+                    {myBackers.length > 1 ? 'have' : 'has'} your back — get in before the streak breaks.
+                  </p>
+                </div>
+              )}
+
               <div className="flex flex-col gap-2.5">
                 {taskSummary.map((member) => {
                   const isMe = member.username === username;
                   const inToday = member.thresholdMet;
+                  const atRisk = member.atRisk;
                   return (
                     <div
                       key={member.username}
                       className={cn(
                         'flex items-center gap-2.5 rounded-xl border p-3',
-                        inToday ? 'border-success/25 bg-success/[0.06]' : 'border-border bg-surface-2',
+                        inToday
+                          ? 'border-success/25 bg-success/[0.06]'
+                          : atRisk
+                            ? 'border-danger/40 bg-danger/[0.06]'
+                            : 'border-border bg-surface-2',
                       )}
                     >
                       <Avatar name={member.username} size={32} me={isMe} />
@@ -403,25 +440,49 @@ export default function CirclePage() {
                         <p
                           className={cn(
                             'mt-0.5 text-xs',
-                            inToday ? 'text-success' : 'text-muted',
+                            inToday ? 'text-success' : atRisk ? 'text-danger' : 'text-muted',
                           )}
                         >
                           {member.totalTasks === 0
                             ? 'No tasks set up yet'
                             : inToday
                               ? 'Reported in ✓'
-                              : `Not yet · ${member.completionPercent}%`}
+                              : atRisk
+                                ? 'At risk — running out of day'
+                                : `Not yet · ${member.completionPercent}%`}
                         </p>
-                      </div>
-                      <span className="shrink-0">
-                        {inToday ? (
-                          <CheckCircle2 className="h-5 w-5 text-success" aria-hidden />
-                        ) : member.totalTasks === 0 ? (
-                          <FileText className="h-4 w-4 text-muted" aria-hidden />
-                        ) : (
-                          <Clock className="h-4 w-4 text-gold" aria-hidden />
+                        {member.backedBy.length > 0 && !inToday && (
+                          <p className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-primary-bright">
+                            <HeartHandshake className="h-3 w-3" aria-hidden /> backed by{' '}
+                            {member.backedBy.join(', ')}
+                          </p>
                         )}
-                      </span>
+                      </div>
+
+                      {/* "I've got you" — back a squadmate who hasn't reported in */}
+                      {!isMe && !inToday && member.totalTasks > 0 && !member.backedBy.includes(username) ? (
+                        <Button
+                          size="sm"
+                          variant={atRisk ? 'fire' : 'secondary'}
+                          loading={rallyingUser === member.username}
+                          loadingText="…"
+                          onClick={() => handleRally(member.username)}
+                        >
+                          <HeartHandshake className="h-4 w-4" aria-hidden /> I&apos;ve got you
+                        </Button>
+                      ) : (
+                        <span className="shrink-0">
+                          {inToday ? (
+                            <CheckCircle2 className="h-5 w-5 text-success" aria-hidden />
+                          ) : member.totalTasks === 0 ? (
+                            <FileText className="h-4 w-4 text-muted" aria-hidden />
+                          ) : atRisk ? (
+                            <ShieldAlert className="h-4 w-4 text-danger" aria-hidden />
+                          ) : (
+                            <Clock className="h-4 w-4 text-gold" aria-hidden />
+                          )}
+                        </span>
+                      )}
                     </div>
                   );
                 })}

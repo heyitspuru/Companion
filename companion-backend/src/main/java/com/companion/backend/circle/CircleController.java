@@ -73,4 +73,12 @@ public class CircleController {
             @PathVariable Long circleId) {
         return ResponseEntity.ok(circleService.getCircleStats(circleId));
     }
+
+    // "I've got you" — back an at-risk squadmate. Returns the refreshed squad status.
+    @PostMapping("/{circleId}/rally")
+    public ResponseEntity<List<com.companion.backend.task.MemberTaskSummary>> rally(
+            @PathVariable Long circleId,
+            @RequestBody Map<String, String> body) {
+        return ResponseEntity.ok(circleService.rally(circleId, body.get("username")));
+    }
 }

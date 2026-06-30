@@ -93,6 +93,8 @@ export default function DashboardPage() {
         endDate: formatDate(endDate),
         customThresholdPercent:
           createForm.completionThreshold === 'CUSTOM' ? createForm.customThresholdPercent : null,
+        // The squad's day boundary + at-risk cutoff resolve in this timezone.
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       });
       setShowCreate(false);
       setStartDate(null);

@@ -3,7 +3,10 @@ package com.companion.backend.circle;
 import com.companion.backend.goal.Goal;
 import com.companion.backend.user.User;
 import jakarta.persistence.*;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -60,9 +63,47 @@ public class Circle {
     @Column(name = "squad_last_complete_date")
     private java.time.LocalDate squadLastCompleteDate;
 
+    // ── Squad clock (Phase 2) ──
+    // "Today" and the at-risk cutoff are meaningless without a timezone. All
+    // circle-scoped daily mechanics (tasks, squad streak, at-risk) resolve the
+    // current day in THIS zone, not the server's.
+    @Column(name = "timezone")
+    private String timezone;
+
+    @Column(name = "daily_cutoff")
+    private LocalTime dailyCutoff = LocalTime.of(21, 0);
+
+    // How long before the cutoff a not-yet-reported-in member counts as "at risk."
+    private static final java.time.Duration AT_RISK_WINDOW = java.time.Duration.ofHours(2);
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
+    }
+
+    /** The squad's timezone, falling back to UTC for rows created before Phase 2. */
+    public ZoneId zoneId() {
+        return ZoneId.of(timezone != null && !timezone.isBlank() ? timezone : "UTC");
+    }
+
+    /** "Today" in the squad's timezone — the single source of truth for the day boundary. */
+    public LocalDate today() {
+        return LocalDate.now(zoneId());
+    }
+
+    /** True once the squad's day is running out (within AT_RISK_WINDOW of the cutoff). */
+    public boolean isPastAtRiskWindow() {
+        return isPastAtRiskWindow(LocalTime.now(zoneId()));
+    }
+
+    /**
+     * Testable core: is {@code now} within AT_RISK_WINDOW of the cutoff?
+     * (Evening cutoffs only — a cutoff earlier than the window would wrap past
+     * midnight; not a real configuration today.)
+     */
+    boolean isPastAtRiskWindow(LocalTime now) {
+        LocalTime cutoff = dailyCutoff != null ? dailyCutoff : LocalTime.of(21, 0);
+        return !now.isBefore(cutoff.minus(AT_RISK_WINDOW));
     }
 
     /**
@@ -94,6 +135,8 @@ public class Circle {
     public int getSquadCurrentStreak() { return squadCurrentStreak; }
     public int getSquadLongestStreak() { return squadLongestStreak; }
     public java.time.LocalDate getSquadLastCompleteDate() { return squadLastCompleteDate; }
+    public String getTimezone() { return timezone; }
+    public LocalTime getDailyCutoff() { return dailyCutoff; }
 
     // Setters
     public void setId(Long id) { this.id = id; }
@@ -109,6 +152,8 @@ public class Circle {
     public void setSquadCurrentStreak(int squadCurrentStreak) { this.squadCurrentStreak = squadCurrentStreak; }
     public void setSquadLongestStreak(int squadLongestStreak) { this.squadLongestStreak = squadLongestStreak; }
     public void setSquadLastCompleteDate(java.time.LocalDate d) { this.squadLastCompleteDate = d; }
+    public void setTimezone(String timezone) { this.timezone = timezone; }
+    public void setDailyCutoff(LocalTime dailyCutoff) { this.dailyCutoff = dailyCutoff; }
 
     // Builder
     public static Builder builder() { return new Builder(); }
@@ -120,6 +165,7 @@ public class Circle {
         private CompletionThreshold completionThreshold = CompletionThreshold.ANY_TASK;
         private Integer customThresholdPercent;
         private CircleStatus status = CircleStatus.ACTIVE;
+        private String timezone;
 
         public Builder name(String name) { this.name = name; return this; }
         public Builder createdBy(User createdBy) { this.createdBy = createdBy; return this; }
@@ -127,6 +173,7 @@ public class Circle {
         public Builder completionThreshold(CompletionThreshold t) { this.completionThreshold = t; return this; }
         public Builder customThresholdPercent(Integer p) { this.customThresholdPercent = p; return this; }
         public Builder status(CircleStatus s) { this.status = s; return this; }
+        public Builder timezone(String timezone) { this.timezone = timezone; return this; }
 
         public Circle build() {
             Circle circle = new Circle();
@@ -136,6 +183,7 @@ public class Circle {
             circle.setCompletionThreshold(this.completionThreshold);
             circle.setCustomThresholdPercent(this.customThresholdPercent);
             circle.setStatus(this.status);
+            circle.setTimezone(this.timezone);
             return circle;
         }
     }

@@ -13,6 +13,7 @@ import com.companion.backend.checkin.Streak;
 import com.companion.backend.checkin.StreakRepository;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -23,19 +24,22 @@ public class TaskService {
     private final CircleMemberRepository circleMemberRepository;
     private final CurrentUserProvider currentUserProvider;
     private final StreakRepository streakRepository;
+    private final com.companion.backend.circle.RallyRepository rallyRepository;
 
     public TaskService(CircleTaskRepository circleTaskRepository,
                        TaskCheckinRepository taskCheckinRepository,
                        CircleRepository circleRepository,
                        CircleMemberRepository circleMemberRepository,
                        CurrentUserProvider currentUserProvider,
-                       StreakRepository streakRepository) {
+                       StreakRepository streakRepository,
+                       com.companion.backend.circle.RallyRepository rallyRepository) {
         this.circleTaskRepository = circleTaskRepository;
         this.taskCheckinRepository = taskCheckinRepository;
         this.circleRepository = circleRepository;
         this.circleMemberRepository = circleMemberRepository;
         this.currentUserProvider = currentUserProvider;
         this.streakRepository = streakRepository;
+        this.rallyRepository = rallyRepository;
     }
 
     private User getCurrentUser() {
@@ -87,7 +91,9 @@ public class TaskService {
         List<CircleTask> tasks = circleTaskRepository
                 .findByCircleIdAndUserIdOrderByDisplayOrderAsc(circleId, user.getId());
 
-        LocalDate today = LocalDate.now();
+        Circle circle = circleRepository.findById(circleId)
+                .orElseThrow(() -> new NotFoundException("Circle not found"));
+        LocalDate today = circle.today();
         List<Long> taskIds = tasks.stream().map(CircleTask::getId).collect(Collectors.toList());
         List<TaskCheckin> todayCheckins = taskCheckinRepository
                 .findByUserIdAndTaskIdIn(user.getId(), taskIds)
@@ -128,7 +134,12 @@ public class TaskService {
             throw new ForbiddenException("Not your task");
         }
 
-        LocalDate today = LocalDate.now();
+        Long circleId = task.getCircle().getId();
+        Circle circle = circleRepository.findById(circleId)
+                .orElseThrow(() -> new NotFoundException("Circle not found"));
+
+        // "Today" is the squad's day, not the server's.
+        LocalDate today = circle.today();
         var existing = taskCheckinRepository
                 .findByTaskIdAndUserIdAndCheckinDate(taskId, user.getId(), today);
 
@@ -146,10 +157,6 @@ public class TaskService {
                     .build();
             taskCheckinRepository.save(checkin);
         }
-
-        Long circleId = task.getCircle().getId();
-        Circle circle = circleRepository.findById(circleId)
-                .orElseThrow(() -> new NotFoundException("Circle not found"));
 
         List<CircleTask> allTasks = circleTaskRepository
                 .findByCircleIdAndUserIdOrderByDisplayOrderAsc(circleId, user.getId());
@@ -281,10 +288,21 @@ public class TaskService {
         return true;
     }
 
-    // Get all members' task completion for today in a circle
+    // Get all members' task completion for today in a circle, plus rally state.
     public List<MemberTaskSummary> getCircleTaskSummary(Long circleId) {
         Circle circle = circleRepository.findById(circleId)
                 .orElseThrow(() -> new NotFoundException("Circle not found"));
+
+        final LocalDate today = circle.today();
+        final boolean dayRunningOut = circle.isPastAtRiskWindow();
+
+        // Today's rallies, grouped by who was backed → drives "X has your back".
+        Map<String, List<String>> backersByTarget = rallyRepository
+                .findByCircleIdAndRallyDate(circleId, today)
+                .stream()
+                .collect(Collectors.groupingBy(
+                        r -> r.getToUser().getUsername(),
+                        Collectors.mapping(r -> r.getFromUser().getUsername(), Collectors.toList())));
 
         return circleMemberRepository.findByCircleId(circleId).stream()
                 .map(member -> {
@@ -293,7 +311,6 @@ public class TaskService {
                             .findByCircleIdAndUserIdOrderByDisplayOrderAsc(circleId, u.getId());
                     List<Long> taskIds = tasks.stream().map(CircleTask::getId).collect(Collectors.toList());
 
-                    LocalDate today = LocalDate.now();
                     long completed = taskCheckinRepository
                             .findByUserIdAndTaskIdIn(u.getId(), taskIds)
                             .stream()
@@ -303,13 +320,20 @@ public class TaskService {
                     int pct = tasks.isEmpty() ? 0 : (int) ((completed * 100) / tasks.size());
 
                     boolean thresholdMet = circle.isThresholdMet(completed, pct);
+                    // At risk = has tasks, hasn't reported in, and the day is running out.
+                    boolean atRisk = !tasks.isEmpty() && !thresholdMet && dayRunningOut;
+
+                    List<String> backedBy = backersByTarget.getOrDefault(u.getUsername(), List.of());
 
                     return new MemberTaskSummary(
                             u.getUsername(),
                             (int) completed,
                             tasks.size(),
                             pct,
-                            thresholdMet
+                            thresholdMet,
+                            atRisk,
+                            !backedBy.isEmpty(),
+                            backedBy
                     );
                 })
                 .collect(Collectors.toList());
