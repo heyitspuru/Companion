@@ -152,6 +152,44 @@ The core insight: **accountability through visibility**. The mild shame of dropp
         └──────────────────────────────────────┘
 ```
 
+### ADR-001 — Scale-to-zero backend (and the cold-start trade-off)
+
+**Status:** Accepted · **Context:** a self-funded student project on Azure for
+Students credits, with low and bursty traffic (a handful of squads, not a
+24/7 audience).
+
+**Decision.** The backend Container App runs with **`minReplicas: 0`
+(scale-to-zero)**: when no requests arrive for a few minutes, Azure shuts the
+container down entirely, and the next request spins it back up.
+
+**Why.** Cost discipline. Scale-to-zero means we pay **≈nothing while idle** —
+which is most of the time for a project at this stage — and only consume
+compute when someone is actually using the app. An always-on instance would
+burn credits around the clock to serve a mostly-empty app.
+
+**The trade-off (consciously accepted).** The first request after an idle
+period pays a **cold start** — the container must provision, the JVM must boot,
+Spring Boot must initialise, and Flyway must run. Measured end-to-end this is
+**~25–30s** on the 0.5-vCPU tier; once warm, requests are **~0.5s**. Because
+*every* entry flow (login, registration, squad create/join) hits this backend,
+a returning user after idle can wait ~30s on their first action. We accept this:
+at current scale, the cost saving outweighs an occasional cold-start delay, and
+warm performance is fine.
+
+**Mitigations already applied.**
+- **Async email** (`@EnableAsync` + a fire-and-forget `EmailService`): the SMTP
+  round-trip for verification / password-reset / rally emails no longer blocks
+  the request thread, so *warm* registration and reset are snappy and the cold
+  start isn't compounded by a 1–3s mail send.
+- Multi-stage Docker image keeps the runtime layer slim (JRE-only), trimming
+  image-pull time on a cold start.
+
+**When we'd revisit.** If traffic grows or the cold start becomes a real user
+complaint, the fix is one command — `--min-replicas 1` (Container Apps bills the
+idle replica at a reduced rate, so the cost stays modest) — optionally with
+`--cpu 1.0` for faster JVM boot, or a GraalVM native image for sub-second starts.
+The architecture is intentionally a reversible one-liner away from always-warm.
+
 ### Request Lifecycle
 
 ```

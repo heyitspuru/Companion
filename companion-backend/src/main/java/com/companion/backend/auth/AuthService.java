@@ -6,10 +6,9 @@ import com.companion.backend.common.ConflictException;
 import com.companion.backend.common.ForbiddenException;
 import com.companion.backend.common.NotFoundException;
 import com.companion.backend.config.JwtUtil;
+import com.companion.backend.notification.EmailService;
 import com.companion.backend.user.User;
 import com.companion.backend.user.UserRepository;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -27,7 +26,7 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final EmailVerificationTokenRepository emailVerificationTokenRepository;
-    private final JavaMailSender mailSender;
+    private final EmailService emailService;
 
     public AuthService(UserRepository userRepository,
                        PasswordEncoder passwordEncoder,
@@ -35,14 +34,14 @@ public class AuthService {
                        AuthenticationManager authenticationManager,
                        PasswordResetTokenRepository passwordResetTokenRepository,
                        EmailVerificationTokenRepository emailVerificationTokenRepository,
-                       JavaMailSender mailSender) {
+                       EmailService emailService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
         this.authenticationManager = authenticationManager;
         this.passwordResetTokenRepository = passwordResetTokenRepository;
         this.emailVerificationTokenRepository = emailVerificationTokenRepository;
-        this.mailSender = mailSender;
+        this.emailService = emailService;
     }
 
     // ── Register ──
@@ -87,20 +86,13 @@ public class AuthService {
         evt.setUsed(false);
         emailVerificationTokenRepository.save(evt);
 
-        try {
-            String verifyLink = AppUrls.frontendBaseUrl() + "/verify-email?token=" + token;
-
-            SimpleMailMessage msg = new SimpleMailMessage();
-            msg.setTo(email);
-            msg.setSubject("Companion — Verify your email");
-            msg.setText("Welcome to Companion! Confirm your email using the link below "
-                    + "(expires in 24 hours):\n\n"
-                    + verifyLink
-                    + "\n\nIf you did not create this account, ignore this email.");
-            mailSender.send(msg);
-        } catch (Exception e) {
-            System.err.println("Failed to send verification email: " + e.getMessage());
-        }
+        // Async: register() returns without waiting for the SMTP round-trip.
+        String verifyLink = AppUrls.frontendBaseUrl() + "/verify-email?token=" + token;
+        emailService.send(email, "Companion — Verify your email",
+                "Welcome to Companion! Confirm your email using the link below "
+                        + "(expires in 24 hours):\n\n"
+                        + verifyLink
+                        + "\n\nIf you did not create this account, ignore this email.");
     }
 
     // ── Verify Email ──
@@ -164,20 +156,12 @@ public class AuthService {
         prt.setUsed(false);
         passwordResetTokenRepository.save(prt);
 
-        try {
-            String resetLink = AppUrls.frontendBaseUrl() + "/reset-password?token=" + token;
-
-            SimpleMailMessage msg = new SimpleMailMessage();
-            msg.setTo(email);
-            msg.setSubject("Companion — Reset your password");
-            msg.setText("Reset your Companion password using the link below "
-                    + "(expires in 15 minutes):\n\n"
-                    + resetLink
-                    + "\n\nIf you did not request this, ignore this email.");
-            mailSender.send(msg);
-        } catch (Exception e) {
-            System.err.println("Failed to send reset email: " + e.getMessage());
-        }
+        String resetLink = AppUrls.frontendBaseUrl() + "/reset-password?token=" + token;
+        emailService.send(email, "Companion — Reset your password",
+                "Reset your Companion password using the link below "
+                        + "(expires in 15 minutes):\n\n"
+                        + resetLink
+                        + "\n\nIf you did not request this, ignore this email.");
     }
 
     // ── Reset Password ──
